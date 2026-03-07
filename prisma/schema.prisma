@@ -1,0 +1,338 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+}
+
+enum BatchType {
+  IIT_JEE
+  NEET
+  JEE_MAINS
+  SCHOOL_8TH
+  SCHOOL_9TH
+  SCHOOL_10TH
+}
+
+enum BatchStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum EntryStatus {
+  SCHEDULED
+  CANCELLED
+  SUBSTITUTED
+}
+
+enum LeaveType {
+  SICK
+  CASUAL
+  EMERGENCY
+  PLANNED
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(TEACHER)
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  teacher   Teacher?
+}
+
+model Center {
+  id         String      @id @default(cuid())
+  name       String
+  address    String?
+  phone      String?
+  createdAt  DateTime    @default(now())
+  classrooms Classroom[]
+  batches    Batch[]
+}
+
+model Subject {
+  id              String           @id @default(cuid())
+  name            String
+  code            String           @unique
+  createdAt       DateTime         @default(now())
+  teacherSubjects TeacherSubject[]
+  batchSubjects   BatchSubject[]
+  timetableEntries TimetableEntry[]
+  teachingAssignments TeachingAssignment[]
+  syllabi          Syllabus[]
+}
+
+model Teacher {
+  id               String                @id @default(cuid())
+  userId           String                @unique
+  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shortCode        String?               // e.g., "ASM" for Amit Sharma Maths
+  employmentType   EmploymentType        @default(FULL_TIME)
+  createdAt        DateTime              @default(now())
+  subjects         TeacherSubject[]
+  availability     TeacherAvailability[]
+  timetableEntries TimetableEntry[]
+  substituteEntries TimetableEntry[]     @relation("SubstituteTeacher")
+  leaves           Leave[]
+  substituteAssignments SubstituteAssignment[]
+  teachingAssignments   TeachingAssignment[]
+  chapterAssignments    ChapterAssignment[]
+  subtopicProgress      SubtopicProgress[]
+}
+
+model TeacherSubject {
+  id        String  @id @default(cuid())
+  teacherId String
+  subjectId String
+  teacher   Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, subjectId])
+}
+
+model Classroom {
+  id               String                 @id @default(cuid())
+  name             String
+  capacity         Int
+  centerId         String
+  center           Center                 @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  equipment        String[]               @default([])
+  createdAt        DateTime               @default(now())
+  timetableEntries TimetableEntry[]
+  availability     ClassroomAvailability[]
+}
+
+model Batch {
+  id               String           @id @default(cuid())
+  name             String
+  batchType        BatchType
+  centerId         String
+  center           Center           @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  strength         Int
+  status           BatchStatus      @default(ACTIVE)
+  createdAt        DateTime         @default(now())
+  batchSubjects    BatchSubject[]
+  timetableEntries TimetableEntry[]
+  teachingAssignments TeachingAssignment[]
+  chapterAssignments  ChapterAssignment[]
+  subtopicProgress    SubtopicProgress[]
+}
+
+model BatchSubject {
+  id           String  @id @default(cuid())
+  batchId      String
+  subjectId    String
+  hoursPerWeek Int
+  batch        Batch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  subject      Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, subjectId])
+}
+
+model TimeSlot {
+  id        String @id @default(cuid())
+  startTime String // "09:00"
+  endTime   String // "10:00"
+  label     String // "Slot 1 (9:00-10:00)"
+  order     Int    @default(0)
+  createdAt DateTime @default(now())
+}
+
+model TeacherAvailability {
+  id          String  @id @default(cuid())
+  teacherId   String
+  teacher     Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  dayOfWeek   Int     // 0=Monday ... 6=Sunday
+  startTime   String
+  endTime     String
+  centerId    String?
+  isAvailable Boolean @default(true)
+
+  @@unique([teacherId, dayOfWeek, startTime, endTime])
+}
+
+model TimetableEntry {
+  id                  String      @id @default(cuid())
+  batchId             String
+  subjectId           String
+  teacherId           String
+  classroomId         String
+  substituteTeacherId String?
+  dayOfWeek           Int
+  startTime           String
+  endTime             String
+  weekStart           DateTime
+  status              EntryStatus @default(SCHEDULED)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  batch             Batch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  subject           Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  teacher           Teacher    @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  classroom         Classroom  @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  substituteTeacher Teacher?   @relation("SubstituteTeacher", fields: [substituteTeacherId], references: [id])
+
+  substituteAssignments SubstituteAssignment[]
+}
+
+model TimetableGeneration {
+  id        String   @id @default(cuid())
+  weekStart DateTime
+  centerId  String?
+  status    String   // GENERATING, COMPLETED, FAILED
+  aiResponse Json?
+  conflicts  Json?
+  createdAt DateTime @default(now())
+  createdBy String
+}
+
+model Leave {
+  id         String      @id @default(cuid())
+  teacherId  String
+  teacher    Teacher     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  leaveType  LeaveType
+  startDate  DateTime
+  endDate    DateTime
+  reason     String?
+  status     LeaveStatus @default(PENDING)
+  approvedBy String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  substituteAssignments SubstituteAssignment[]
+}
+
+model SubstituteAssignment {
+  id                  String @id @default(cuid())
+  leaveId             String
+  leave               Leave  @relation(fields: [leaveId], references: [id], onDelete: Cascade)
+  originalEntryId     String
+  originalEntry       TimetableEntry @relation(fields: [originalEntryId], references: [id], onDelete: Cascade)
+  substituteTeacherId String
+  substituteTeacher   Teacher @relation(fields: [substituteTeacherId], references: [id], onDelete: Cascade)
+  status              String  @default("PENDING") // PENDING, ACCEPTED, DECLINED
+  createdAt           DateTime @default(now())
+}
+
+model TeachingAssignment {
+  id             String   @id @default(cuid())
+  teacherId      String
+  teacher        Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  batchId        String
+  batch          Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  subjectId      String
+  subject        Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  totalHours     Int      // Total hours to complete syllabus (e.g., 300)
+  startDate      DateTime // When this assignment starts (e.g., March 1)
+  endDate        DateTime // When it must be completed (e.g., August 31)
+  completedHours Float    @default(0) // Hours already done
+  notes          String?  // Any notes about this assignment
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([teacherId, batchId, subjectId])
+}
+
+model Settings {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}
+
+model ClassroomAvailability {
+  id          String    @id @default(cuid())
+  classroomId String
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  date        DateTime
+  startTime   String
+  endTime     String
+  reason      String?
+  isAvailable Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+}
+
+model Syllabus {
+  id          String    @id @default(cuid())
+  batchType   BatchType
+  subjectId   String
+  subject     Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  chapters    Chapter[]
+
+  @@unique([batchType, subjectId])
+}
+
+model Chapter {
+  id          String              @id @default(cuid())
+  syllabusId  String
+  syllabus    Syllabus            @relation(fields: [syllabusId], references: [id], onDelete: Cascade)
+  name        String
+  order       Int                 @default(0)
+  description String?
+  createdAt   DateTime            @default(now())
+  subtopics   Subtopic[]
+  assignments ChapterAssignment[]
+}
+
+model Subtopic {
+  id             String             @id @default(cuid())
+  chapterId      String
+  chapter        Chapter            @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  name           String
+  order          Int                @default(0)
+  estimatedHours Float?
+  createdAt      DateTime           @default(now())
+  progress       SubtopicProgress[]
+}
+
+model ChapterAssignment {
+  id        String   @id @default(cuid())
+  chapterId String
+  chapter   Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  teacherId String
+  teacher   Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  batchId   String
+  batch     Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([chapterId, teacherId, batchId])
+}
+
+model SubtopicProgress {
+  id          String   @id @default(cuid())
+  subtopicId  String
+  subtopic    Subtopic @relation(fields: [subtopicId], references: [id], onDelete: Cascade)
+  teacherId   String
+  teacher     Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  batchId     String
+  batch       Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  completedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@unique([subtopicId, teacherId, batchId])
+}
