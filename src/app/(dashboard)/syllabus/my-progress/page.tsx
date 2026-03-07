@@ -112,46 +112,50 @@ export default function MyProgressPage() {
   return (
     <div>
       <Header title="My Syllabus" />
-      <div className="p-6">
+      <div className="p-6 animate-fadeIn">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">My Syllabus Progress</h1>
-          <p className="text-gray-500 text-sm mt-1">Track your assigned chapters and mark subtopics as completed</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">My Syllabus Progress</h1>
+          <p className="text-slate-500 text-sm mt-1">Track your assigned chapters and mark subtopics as completed</p>
         </div>
 
         {/* Summary */}
         {!loading && data.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="text-2xl font-bold text-gray-900">{totalAssigned}</div>
-              <div className="text-xs text-gray-500">Assigned Chapters</div>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+              <div className="text-2xl font-bold text-slate-900">{totalAssigned}</div>
+              <div className="text-xs text-slate-500">Assigned Chapters</div>
             </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
               <div className="text-2xl font-bold text-green-600">{completedChapters}</div>
-              <div className="text-xs text-gray-500">Completed Chapters</div>
+              <div className="text-xs text-slate-500">Completed Chapters</div>
             </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
               <div className="text-2xl font-bold text-blue-600">{completedSubtopics}/{totalSubtopics}</div>
-              <div className="text-xs text-gray-500">Subtopics Done</div>
+              <div className="text-xs text-slate-500">Subtopics Done</div>
             </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
               <div className="flex items-end gap-2">
-                <div className="text-2xl font-bold text-gray-900">{overallPercent}%</div>
+                <div className="text-2xl font-bold text-slate-900">{overallPercent}%</div>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
+              <div className="w-full bg-slate-200 rounded-full h-2 mt-1">
                 <div className={`h-2 rounded-full ${overallPercent === 100 ? "bg-green-500" : "bg-blue-500"}`}
                   style={{ width: `${overallPercent}%` }} />
               </div>
-              <div className="text-xs text-gray-500 mt-1">Overall Progress</div>
+              <div className="text-xs text-slate-500 mt-1">Overall Progress</div>
             </div>
           </div>
         )}
 
         {loading ? (
-          <div className="text-center py-12 text-gray-500">Loading...</div>
+          <div className="py-12 space-y-4">
+            <div className="h-10 skeleton w-full max-w-2xl mx-auto" />
+            <div className="h-10 skeleton w-full max-w-2xl mx-auto opacity-75" />
+            <div className="h-10 skeleton w-full max-w-2xl mx-auto opacity-50" />
+          </div>
         ) : data.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
-            <p className="text-gray-500 text-lg mb-2">No syllabi assigned to you</p>
-            <p className="text-gray-400 text-sm">Your admin will assign chapters from the syllabus management page.</p>
+          <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 shadow-sm">
+            <p className="text-slate-400 text-lg mb-2">No syllabi assigned to you</p>
+            <p className="text-slate-400 text-sm">Your admin will assign chapters from the syllabus management page.</p>
           </div>
         ) : (
           <div className="space-y-6">
@@ -161,33 +165,33 @@ export default function MyProgressPage() {
               const sylPercent = sylTotal > 0 ? Math.round((sylCompleted / sylTotal) * 100) : 0;
 
               return (
-                <div key={`${syl.syllabusId}_${syl.batchId}`} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                  <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center">
+                <div key={`${syl.syllabusId}_${syl.batchId}`} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center">
                     <div>
-                      <h2 className="font-semibold text-gray-900">{syl.syllabusName}</h2>
+                      <h2 className="font-semibold text-slate-900">{syl.syllabusName}</h2>
                       <div className="flex gap-2 mt-1 flex-wrap">
-                        <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-xs font-medium">
+                        <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full text-xs font-medium">
                           {BATCH_LABELS[syl.batchType] || syl.batchType}
                         </span>
-                        <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs font-medium">
+                        <span className="bg-violet-50 text-violet-700 px-2 py-0.5 rounded-full text-xs font-medium">
                           {syl.subject.code}
                         </span>
-                        <span className="bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded text-xs font-medium">
+                        <span className="bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded-full text-xs font-medium">
                           {syl.batchName}
                         </span>
-                        <span className="text-gray-500 text-xs">{syl.chapters.length} chapters assigned</span>
+                        <span className="text-slate-500 text-xs">{syl.chapters.length} chapters assigned</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="w-24 bg-gray-200 rounded-full h-2">
+                      <div className="w-24 bg-slate-200 rounded-full h-2">
                         <div className={`h-2 rounded-full ${sylPercent === 100 ? "bg-green-500" : "bg-blue-500"}`}
                           style={{ width: `${sylPercent}%` }} />
                       </div>
-                      <span className="text-sm font-medium text-gray-700">{sylPercent}%</span>
+                      <span className="text-sm font-medium text-slate-700">{sylPercent}%</span>
                     </div>
                   </div>
 
-                  <div className="divide-y divide-gray-100">
+                  <div className="divide-y divide-slate-100">
                     {syl.chapters.map((ch) => {
                       const chPercent = ch.totalSubtopics > 0 ? Math.round((ch.completedSubtopics / ch.totalSubtopics) * 100) : 0;
                       const isComplete = ch.totalSubtopics > 0 && ch.completedSubtopics === ch.totalSubtopics;
@@ -195,25 +199,25 @@ export default function MyProgressPage() {
 
                       return (
                         <div key={ch.id}>
-                          <div className={`flex items-center justify-between px-5 py-3 cursor-pointer hover:bg-gray-50 ${isComplete ? "bg-green-50" : ""}`}
+                          <div className={`flex items-center justify-between px-5 py-3 cursor-pointer hover:bg-slate-50/50 transition-colors ${isComplete ? "bg-green-50" : ""}`}
                             onClick={() => toggleExpand(`${ch.id}_${syl.batchId}`)}>
                             <div className="flex items-center gap-3">
-                              <span className="text-gray-400 text-sm">{isExpanded ? "v" : ">"}</span>
+                              <span className="text-slate-400 text-sm">{isExpanded ? "v" : ">"}</span>
                               {isComplete ? (
                                 <span className="text-green-500 font-bold">&#10003;</span>
                               ) : (
-                                <span className="text-gray-300">&#9675;</span>
+                                <span className="text-slate-300">&#9675;</span>
                               )}
-                              <span className={`font-medium ${isComplete ? "text-green-700" : "text-gray-900"}`}>
+                              <span className={`font-medium ${isComplete ? "text-green-700" : "text-slate-900"}`}>
                                 {ch.order}. {ch.name}
                               </span>
                               {ch.totalEstimatedHours > 0 && (
-                                <span className="text-xs text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded">{ch.totalEstimatedHours}h</span>
+                                <span className="text-xs text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded-full">{ch.totalEstimatedHours}h</span>
                               )}
                             </div>
                             <div className="flex items-center gap-3">
-                              <span className="text-xs text-gray-500">{ch.completedSubtopics}/{ch.totalSubtopics}</span>
-                              <div className="w-16 bg-gray-200 rounded-full h-1.5">
+                              <span className="text-xs text-slate-500">{ch.completedSubtopics}/{ch.totalSubtopics}</span>
+                              <div className="w-16 bg-slate-200 rounded-full h-1.5">
                                 <div className={`h-1.5 rounded-full ${isComplete ? "bg-green-500" : "bg-blue-500"}`}
                                   style={{ width: `${chPercent}%` }} />
                               </div>
@@ -221,7 +225,7 @@ export default function MyProgressPage() {
                           </div>
 
                           {isExpanded && (
-                            <div className="px-5 py-2 bg-gray-50 border-t border-gray-100">
+                            <div className="px-5 py-2 bg-slate-50 border-t border-slate-100">
                               <ul className="space-y-1">
                                 {ch.subtopics.map((st) => (
                                   <li key={st.id} className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-white">
@@ -231,13 +235,13 @@ export default function MyProgressPage() {
                                         checked={st.completed}
                                         disabled={toggling.has(`${st.id}_${syl.batchId}`)}
                                         onChange={() => toggleSubtopic(st.id, st.completed, syl.batchId, syl.syllabusId)}
-                                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                       />
-                                      <span className={`text-sm ${st.completed ? "text-gray-500 line-through" : "text-gray-700"}`}>
+                                      <span className={`text-sm ${st.completed ? "text-slate-500 line-through" : "text-slate-700"}`}>
                                         {st.name}
                                       </span>
                                       {st.estimatedHours != null && st.estimatedHours > 0 && (
-                                        <span className="text-xs text-orange-500 bg-orange-50 px-1 py-0.5 rounded">{st.estimatedHours}h</span>
+                                        <span className="text-xs text-orange-500 bg-orange-50 px-1 py-0.5 rounded-full">{st.estimatedHours}h</span>
                                       )}
                                     </label>
                                     {st.completed && st.completedAt && (

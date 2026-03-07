@@ -77,10 +77,10 @@ interface DragData {
 }
 
 const SUBJECT_COLORS: Record<string, string> = {
-  PHY: "bg-blue-100 text-blue-800 border-blue-300",
-  CHE: "bg-green-100 text-green-800 border-green-300",
-  MAT: "bg-purple-100 text-purple-800 border-purple-300",
-  BIO: "bg-orange-100 text-orange-800 border-orange-300",
+  PHY: "bg-blue-50 text-blue-800 border-blue-300",
+  CHE: "bg-emerald-50 text-emerald-700 border-emerald-300",
+  MAT: "bg-violet-50 text-violet-700 border-violet-300",
+  BIO: "bg-amber-50 text-amber-700 border-amber-300",
   ENG: "bg-pink-100 text-pink-800 border-pink-300",
 };
 
@@ -280,7 +280,13 @@ export default function ManualTimetablePage() {
     return (
       <div>
         <Header title="Manual Timetable Editor" />
-        <div className="p-6 text-center text-gray-500">Loading editor...</div>
+        <div className="p-6">
+          <div className="py-12 space-y-4">
+            <div className="h-10 skeleton w-full max-w-2xl mx-auto" />
+            <div className="h-10 skeleton w-full max-w-2xl mx-auto opacity-75" />
+            <div className="h-10 skeleton w-full max-w-2xl mx-auto opacity-50" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -288,12 +294,12 @@ export default function ManualTimetablePage() {
   return (
     <div>
       <Header title="Manual Timetable Editor" />
-      <div className="p-4">
+      <div className="p-4 animate-fadeIn">
         {/* Top bar */}
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Manual Timetable Editor</h1>
-            <p className="text-xs text-gray-500">Drag assignments from the sidebar and drop them into time slots</p>
+            <h1 className="text-xl font-bold text-slate-900">Manual Timetable Editor</h1>
+            <p className="text-xs text-slate-500">Drag assignments from the sidebar and drop them into time slots</p>
           </div>
           <a href="/timetable" className="text-sm text-blue-600 hover:underline">
             &larr; Back to Timetable View
@@ -303,27 +309,27 @@ export default function ManualTimetablePage() {
         {/* Filters */}
         <div className="flex gap-3 mb-4">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Week</label>
+            <label className="block text-xs text-slate-500 mb-1">Week</label>
             <input type="date" value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)}
-              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+              className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200" />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Center</label>
+            <label className="block text-xs text-slate-500 mb-1">Center</label>
             <select value={selectedCenter} onChange={(e) => { setSelectedCenter(e.target.value); setSelectedBatch(""); }}
-              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+              className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200">
               <option value="">All Centers</option>
               {centers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Batch</label>
+            <label className="block text-xs text-slate-500 mb-1">Batch</label>
             <select value={selectedBatch || batchId} onChange={(e) => setSelectedBatch(e.target.value)}
-              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+              className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200">
               {filteredBatches.map((b) => <option key={b.id} value={b.id}>{b.name} ({b.center.name})</option>)}
             </select>
           </div>
           <div className="flex items-end">
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-slate-400">
               {entries.filter((e) => e.batchId === batchId && e.status !== "CANCELLED").length} slots filled for this batch
             </span>
           </div>
@@ -331,7 +337,7 @@ export default function ManualTimetablePage() {
 
         {/* Error banner */}
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2 rounded-lg mb-4 flex justify-between items-center">
+          <div className="bg-rose-50 border border-red-200 text-rose-700 text-sm px-4 py-2 rounded-lg mb-4 flex justify-between items-center">
             <span>{error}</span>
             <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 ml-4">&times;</button>
           </div>
@@ -346,25 +352,25 @@ export default function ManualTimetablePage() {
         <div className="flex gap-4">
           {/* ─── Main Grid ─── */}
           <div className="flex-1 overflow-auto">
-            <div className="bg-white rounded-xl border border-gray-200 overflow-auto">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-auto">
               <table className="w-full min-w-[800px]">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="text-left px-3 py-2 text-xs font-medium text-gray-500 sticky left-0 bg-gray-50 w-24">
+                  <tr className="bg-slate-50/80 border-b border-slate-200">
+                    <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider sticky left-0 bg-slate-50/80 w-24">
                       Time
                     </th>
                     {weekDates.map(({ day, date }, i) => (
-                      <th key={i} className="text-center px-1 py-2 text-xs font-medium text-gray-500 min-w-[120px]">
+                      <th key={i} className="text-center px-1 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider min-w-[120px]">
                         <div>{day}</div>
-                        <div className="text-[10px] text-gray-400">{date}</div>
+                        <div className="text-[10px] text-slate-400">{date}</div>
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {timeSlots.map((slot) => (
-                    <tr key={slot.id} className="border-b border-gray-100">
-                      <td className="px-3 py-1 text-[11px] font-medium text-gray-500 sticky left-0 bg-white whitespace-nowrap">
+                    <tr key={slot.id} className="border-b border-slate-100">
+                      <td className="px-3 py-1 text-[11px] font-medium text-slate-500 sticky left-0 bg-white whitespace-nowrap">
                         {slot.startTime}-{slot.endTime}
                       </td>
                       {weekDates.map((_, dayIndex) => {
@@ -378,7 +384,7 @@ export default function ManualTimetablePage() {
                             key={dayIndex}
                             className={`px-1 py-1 min-h-[60px] transition-colors ${
                               isDragOver
-                                ? batchBusy ? "bg-red-50" : "bg-blue-50"
+                                ? batchBusy ? "bg-rose-50" : "bg-blue-50"
                                 : ""
                             }`}
                             onDragOver={(e) => handleDragOver(e, cellKey)}
@@ -386,7 +392,7 @@ export default function ManualTimetablePage() {
                             onDrop={(e) => handleDrop(e, dayIndex, slot)}
                           >
                             {cellEntries.map((entry) => {
-                              const colorClass = SUBJECT_COLORS[entry.subject.code] || "bg-gray-100 text-gray-800 border-gray-200";
+                              const colorClass = SUBJECT_COLORS[entry.subject.code] || "bg-slate-100 text-slate-800 border-slate-200";
                               return (
                                 <div key={entry.id} className={`${colorClass} border rounded-lg p-1.5 text-[11px] mb-1 relative group`}>
                                   <div className="font-semibold">{entry.subject.code}</div>
@@ -424,12 +430,12 @@ export default function ManualTimetablePage() {
 
           {/* ─── Sidebar: Assignment Cards ─── */}
           <div className="w-72 flex-shrink-0">
-            <div className="bg-white rounded-xl border border-gray-200 p-3 sticky top-4 max-h-[calc(100vh-160px)] overflow-y-auto">
-              <h3 className="font-semibold text-gray-900 text-sm mb-3">Teaching Assignments</h3>
-              <p className="text-[10px] text-gray-400 mb-3">Drag cards to the grid to schedule</p>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 sticky top-4 max-h-[calc(100vh-160px)] overflow-y-auto">
+              <h3 className="font-semibold text-slate-900 text-sm mb-3">Teaching Assignments</h3>
+              <p className="text-[10px] text-slate-400 mb-3">Drag cards to the grid to schedule</p>
 
               {batchAssignments.length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-4">
+                <p className="text-xs text-slate-400 text-center py-4">
                   No assignments for this batch.
                   <br />
                   <a href="/teaching-assignments" className="text-blue-500 hover:underline">Create assignments first</a>
@@ -440,7 +446,7 @@ export default function ManualTimetablePage() {
                     const scheduled = getScheduledSlots(a.teacherId, a.subjectId, a.batchId);
                     const needed = a.slotsPerWeek;
                     const done = scheduled >= needed;
-                    const colorClass = SUBJECT_COLORS[a.subject.code] || "bg-gray-50 border-gray-200";
+                    const colorClass = SUBJECT_COLORS[a.subject.code] || "bg-slate-50 border-slate-200";
                     const weekLoad = getTeacherWeeklyLoad(a.teacherId);
 
                     return (
@@ -459,7 +465,7 @@ export default function ManualTimetablePage() {
                         }
                         className={`${colorClass} border rounded-lg p-2.5 ${
                           done ? "opacity-50 cursor-not-allowed" : "cursor-grab active:cursor-grabbing hover:shadow-md"
-                        } transition`}
+                        } transition-all duration-200`}
                       >
                         <div className="flex justify-between items-start">
                           <div>
@@ -467,7 +473,7 @@ export default function ManualTimetablePage() {
                             <div className="text-[11px] opacity-70">{a.teacher.user.name}</div>
                           </div>
                           <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                            done ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                            done ? "bg-emerald-50 text-emerald-700" : "bg-yellow-100 text-yellow-700"
                           }`}>
                             {scheduled}/{needed}
                           </span>
@@ -481,7 +487,7 @@ export default function ManualTimetablePage() {
                           </div>
                         </div>
                         {/* Progress bar */}
-                        <div className="mt-1.5 h-1 bg-gray-200 rounded-full overflow-hidden">
+                        <div className="mt-1.5 h-1 bg-slate-200 rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full ${done ? "bg-green-500" : "bg-yellow-500"}`}
                             style={{ width: `${Math.min(100, (scheduled / Math.max(1, needed)) * 100)}%` }}
@@ -494,16 +500,16 @@ export default function ManualTimetablePage() {
               )}
 
               {/* All teachers overview */}
-              <div className="mt-4 pt-3 border-t border-gray-200">
-                <h4 className="font-medium text-gray-700 text-xs mb-2">Teacher Load This Week</h4>
+              <div className="mt-4 pt-3 border-t border-slate-200">
+                <h4 className="font-medium text-slate-700 text-xs mb-2">Teacher Load This Week</h4>
                 <div className="space-y-1">
                   {teachers
                     .filter((t) => getTeacherWeeklyLoad(t.id) > 0)
                     .sort((a, b) => getTeacherWeeklyLoad(b.id) - getTeacherWeeklyLoad(a.id))
                     .map((t) => (
                       <div key={t.id} className="flex justify-between text-[11px]">
-                        <span className="text-gray-600 truncate">{t.user.name}</span>
-                        <span className="text-gray-900 font-medium ml-2">{getTeacherWeeklyLoad(t.id)} slots</span>
+                        <span className="text-slate-600 truncate">{t.user.name}</span>
+                        <span className="text-slate-900 font-medium ml-2">{getTeacherWeeklyLoad(t.id)} slots</span>
                       </div>
                     ))}
                 </div>

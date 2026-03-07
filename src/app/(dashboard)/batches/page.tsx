@@ -114,59 +114,63 @@ export default function BatchesPage() {
   return (
     <div>
       <Header title="Batches" />
-      <div className="p-6">
+      <div className="p-6 animate-fadeIn">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Batches</h1>
-            <p className="text-gray-500 text-sm mt-1">Manage student batches and their subjects</p>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Batches</h1>
+            <p className="text-slate-500 text-sm mt-1">Manage student batches and their subjects</p>
           </div>
-          <button onClick={openAdd} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium">
+          <button onClick={openAdd} className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-200 text-sm font-medium">
             + Add Batch
           </button>
         </div>
 
         {loading ? (
-          <div className="text-center py-12 text-gray-500">Loading...</div>
+          <div className="py-12 space-y-4">
+            <div className="h-10 skeleton w-full max-w-2xl mx-auto" />
+            <div className="h-10 skeleton w-full max-w-2xl mx-auto opacity-75" />
+            <div className="h-10 skeleton w-full max-w-2xl mx-auto opacity-50" />
+          </div>
         ) : batches.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
-            <p className="text-gray-500">No batches yet.</p>
+          <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 shadow-sm">
+            <p className="text-slate-400">No batches yet.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {batches.map((b) => (
-              <div key={b.id} className="bg-white rounded-xl border border-gray-200 p-5">
+              <div key={b.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
                 <div className="flex justify-between items-start mb-3">
                   <div>
-                    <h3 className="font-semibold text-gray-900">{b.name}</h3>
-                    <p className="text-sm text-gray-500">{b.center.name}</p>
+                    <h3 className="font-semibold text-slate-900">{b.name}</h3>
+                    <p className="text-sm text-slate-500">{b.center.name}</p>
                   </div>
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${b.status === "ACTIVE" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${b.status === "ACTIVE" ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-600"}`}>
                     {b.status}
                   </span>
                 </div>
                 <div className="space-y-2 mb-4">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Type</span>
+                    <span className="text-slate-500">Type</span>
                     <span className="font-medium">{formatBatchType(b.batchType)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Students</span>
+                    <span className="text-slate-500">Students</span>
                     <span className="font-medium">{b.strength}</span>
                   </div>
                 </div>
                 <div className="mb-4">
-                  <p className="text-xs text-gray-500 mb-2">Subjects ({b.batchSubjects.length})</p>
+                  <p className="text-xs text-slate-500 mb-2">Subjects ({b.batchSubjects.length})</p>
                   <div className="flex flex-wrap gap-1">
                     {b.batchSubjects.map((bs) => (
-                      <span key={bs.id} className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">
+                      <span key={bs.id} className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full text-xs">
                         {bs.subject.code} ({bs.hoursPerWeek}h/w)
                       </span>
                     ))}
                   </div>
                 </div>
-                <div className="flex gap-2 pt-3 border-t border-gray-100">
-                  <button onClick={() => openEdit(b)} className="text-blue-600 hover:text-blue-800 text-sm font-medium">Edit</button>
-                  <button onClick={() => handleDelete(b.id)} className="text-red-600 hover:text-red-800 text-sm font-medium ml-auto">Delete</button>
+                <div className="flex gap-2 pt-3 border-t border-slate-100">
+                  <button onClick={() => openEdit(b)} className="text-blue-600 hover:text-blue-700 text-sm font-medium transition-colors">Edit</button>
+                  <button onClick={() => handleDelete(b.id)} className="text-red-500 hover:text-red-600 text-sm font-medium transition-colors ml-auto">Delete</button>
                 </div>
               </div>
             ))}
@@ -176,42 +180,42 @@ export default function BatchesPage() {
         <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editing ? "Edit Batch" : "Add Batch"}>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Batch Name *</label>
-              <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" required />
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Batch Name *</label>
+              <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200" required />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Type *</label>
-                <select value={form.batchType} onChange={(e) => setForm({ ...form, batchType: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none">
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Type *</label>
+                <select value={form.batchType} onChange={(e) => setForm({ ...form, batchType: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200">
                   {BATCH_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Strength *</label>
-                <input type="number" value={form.strength} onChange={(e) => setForm({ ...form, strength: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" required min={1} />
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Strength *</label>
+                <input type="number" value={form.strength} onChange={(e) => setForm({ ...form, strength: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200" required min={1} />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Center *</label>
-              <select value={form.centerId} onChange={(e) => setForm({ ...form, centerId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" required>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Center *</label>
+              <select value={form.centerId} onChange={(e) => setForm({ ...form, centerId: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200" required>
                 <option value="">Select Center</option>
                 {centers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Subjects & Weekly Hours</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Subjects & Weekly Hours</label>
               <div className="space-y-2">
                 {subjects.map((s) => {
                   const selected = form.subjects.find((fs) => fs.subjectId === s.id);
                   return (
                     <div key={s.id} className="flex items-center gap-3">
                       <button type="button" onClick={() => toggleSubject(s.id)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex-1 text-left ${selected ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex-1 text-left ${selected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
                         {s.name} ({s.code})
                       </button>
                       {selected && (
                         <input type="number" value={selected.hoursPerWeek} onChange={(e) => updateSubjectHours(s.id, Number(e.target.value))}
-                          className="w-20 px-2 py-1.5 border border-gray-300 rounded-lg text-sm" min={1} max={20} placeholder="hrs/wk" />
+                          className="w-20 px-2 py-1.5 border border-slate-300 rounded-lg text-sm" min={1} max={20} placeholder="hrs/wk" />
                       )}
                     </div>
                   );
@@ -219,8 +223,8 @@ export default function BatchesPage() {
               </div>
             </div>
             <div className="flex gap-3 pt-2">
-              <button type="submit" className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition font-medium">{editing ? "Update" : "Add"} Batch</button>
-              <button type="button" onClick={() => setModalOpen(false)} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition font-medium">Cancel</button>
+              <button type="submit" className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-2 rounded-lg hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-200 font-medium">{editing ? "Update" : "Add"} Batch</button>
+              <button type="button" onClick={() => setModalOpen(false)} className="flex-1 bg-slate-100 text-slate-700 py-2 rounded-lg hover:bg-slate-200 transition-all duration-200 font-medium">Cancel</button>
             </div>
           </form>
         </Modal>

@@ -83,53 +83,65 @@ export default function SettingsPage() {
   return (
     <div>
       <Header title="Settings" />
-      <div className="p-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Settings</h1>
+      <div className="p-6 animate-fadeIn">
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight mb-6">Settings</h1>
 
         {/* Provider Selection */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-2xl mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">AI Provider</h2>
-          <p className="text-sm text-gray-500 mb-4">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 max-w-2xl mb-6">
+          <h2 className="text-lg font-semibold text-slate-900 mb-2">AI Provider</h2>
+          <p className="text-sm text-slate-500 mb-4">
             Choose which AI model to use for timetable generation.
           </p>
 
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => handleSaveProvider("gemini")}
-              className={`p-4 rounded-lg border-2 text-left transition ${
+              className={`p-4 rounded-xl border-2 text-left transition-all duration-200 ${
                 provider === "gemini"
-                  ? "border-blue-600 bg-blue-50"
-                  : "border-gray-200 hover:border-gray-300"
+                  ? "border-blue-500 bg-gradient-to-br from-blue-50 to-white shadow-md shadow-blue-500/10 ring-1 ring-blue-500/20"
+                  : "border-slate-200 hover:border-slate-300 hover:shadow-sm"
               }`}
             >
               <div className="flex items-center justify-between mb-1">
-                <span className="font-semibold text-gray-900">Gemini 2.0 Flash</span>
-                <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Free</span>
+                <span className="font-semibold text-slate-900">Gemini 2.0 Flash</span>
+                <span className="text-xs bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-700 px-2.5 py-0.5 rounded-full font-medium border border-emerald-200/60">Free</span>
               </div>
-              <p className="text-xs text-gray-500">Google AI. Fast, free tier with generous limits. Great for structured output.</p>
+              <p className="text-xs text-slate-500">Google AI. Fast, free tier with generous limits. Great for structured output.</p>
+              {provider === "gemini" && (
+                <div className="mt-2 flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                  <span className="text-xs text-blue-600 font-medium">Active</span>
+                </div>
+              )}
             </button>
 
             <button
               onClick={() => handleSaveProvider("claude")}
-              className={`p-4 rounded-lg border-2 text-left transition ${
+              className={`p-4 rounded-xl border-2 text-left transition-all duration-200 ${
                 provider === "claude"
-                  ? "border-blue-600 bg-blue-50"
-                  : "border-gray-200 hover:border-gray-300"
+                  ? "border-violet-500 bg-gradient-to-br from-violet-50 to-white shadow-md shadow-violet-500/10 ring-1 ring-violet-500/20"
+                  : "border-slate-200 hover:border-slate-300 hover:shadow-sm"
               }`}
             >
               <div className="flex items-center justify-between mb-1">
-                <span className="font-semibold text-gray-900">Claude Sonnet</span>
-                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">Paid</span>
+                <span className="font-semibold text-slate-900">Claude Sonnet</span>
+                <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-full font-medium border border-slate-200/60">Paid</span>
               </div>
-              <p className="text-xs text-gray-500">Anthropic AI. Premium quality, paid per token. Best reasoning.</p>
+              <p className="text-xs text-slate-500">Anthropic AI. Premium quality, paid per token. Best reasoning.</p>
+              {provider === "claude" && (
+                <div className="mt-2 flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-violet-500"></div>
+                  <span className="text-xs text-violet-600 font-medium">Active</span>
+                </div>
+              )}
             </button>
           </div>
         </div>
 
         {/* Gemini API Key */}
-        <div className={`bg-white rounded-xl border border-gray-200 p-6 max-w-2xl mb-6 ${provider !== "gemini" ? "opacity-60" : ""}`}>
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">Gemini API Key</h2>
-          <p className="text-sm text-gray-500 mb-4">
+        <div className={`bg-white rounded-2xl border border-slate-200 shadow-sm p-6 max-w-2xl mb-6 ${provider !== "gemini" ? "opacity-60" : ""}`}>
+          <h2 className="text-lg font-semibold text-slate-900 mb-2">Gemini API Key</h2>
+          <p className="text-sm text-slate-500 mb-4">
             Get a free API key from{" "}
             <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
               aistudio.google.com/apikey
@@ -150,19 +162,19 @@ export default function SettingsPage() {
               value={geminiKey}
               onChange={(e) => setGeminiKey(e.target.value)}
               placeholder={hasGeminiKey ? "Enter new key to replace existing" : "AIza..."}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+              className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-sm"
             />
             <button onClick={() => handleSaveKey("gemini")} disabled={!geminiKey || saving}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-50">
+              className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-200 text-sm font-medium disabled:opacity-50">
               {saving ? "Saving..." : "Save Key"}
             </button>
           </div>
         </div>
 
         {/* Claude API Key */}
-        <div className={`bg-white rounded-xl border border-gray-200 p-6 max-w-2xl mb-6 ${provider !== "claude" ? "opacity-60" : ""}`}>
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">Claude API Key</h2>
-          <p className="text-sm text-gray-500 mb-4">
+        <div className={`bg-white rounded-2xl border border-slate-200 shadow-sm p-6 max-w-2xl mb-6 ${provider !== "claude" ? "opacity-60" : ""}`}>
+          <h2 className="text-lg font-semibold text-slate-900 mb-2">Claude API Key</h2>
+          <p className="text-sm text-slate-500 mb-4">
             Get your key from{" "}
             <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
               console.anthropic.com
@@ -183,23 +195,26 @@ export default function SettingsPage() {
               value={claudeKey}
               onChange={(e) => setClaudeKey(e.target.value)}
               placeholder={hasClaudeKey ? "Enter new key to replace existing" : "sk-ant-api03-..."}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+              className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-sm"
             />
             <button onClick={() => handleSaveKey("claude")} disabled={!claudeKey || saving}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-50">
+              className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-200 text-sm font-medium disabled:opacity-50">
               {saving ? "Saving..." : "Save Key"}
             </button>
           </div>
         </div>
 
         {/* Test Connection */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-2xl">
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">Test Connection</h2>
-          <p className="text-sm text-gray-500 mb-4">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 max-w-2xl">
+          <h2 className="text-lg font-semibold text-slate-900 mb-2">Test Connection</h2>
+          <p className="text-sm text-slate-500 mb-4">
             Test the currently selected provider ({provider === "gemini" ? "Gemini" : "Claude"}).
           </p>
           <button onClick={handleTest} disabled={testing || !activeHasKey}
-            className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition text-sm font-medium disabled:opacity-50">
+            className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-200 transition-all duration-200 text-sm font-medium disabled:opacity-50 flex items-center gap-2">
+            {testing && (
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            )}
             {testing ? "Testing..." : "Test Connection"}
           </button>
           {testResult && (

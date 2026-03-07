@@ -154,13 +154,13 @@ export default function TeachingAssignmentsPage() {
   return (
     <div>
       <Header title="Teaching Assignments" />
-      <div className="p-6">
+      <div className="p-6 animate-fadeIn">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Teaching Assignments</h1>
-            <p className="text-gray-500 text-sm mt-1">Assign teachers to batches with syllabus hours</p>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Teaching Assignments</h1>
+            <p className="text-slate-500 text-sm mt-1">Assign teachers to batches with syllabus hours</p>
           </div>
-          <button onClick={openAdd} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm font-medium">
+          <button onClick={openAdd} className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-200 text-sm font-medium">
             + Add Assignment
           </button>
         </div>
@@ -172,15 +172,15 @@ export default function TeachingAssignmentsPage() {
               <button
                 key={tid}
                 onClick={() => setFilterTeacher(filterTeacher === tid ? "" : tid)}
-                className={`text-left p-3 rounded-lg border transition ${
-                  filterTeacher === tid ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white hover:border-gray-300"
+                className={`text-left p-3 rounded-lg border transition-all duration-200 ${
+                  filterTeacher === tid ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white hover:border-slate-300"
                 }`}
               >
-                <div className="font-medium text-gray-900 text-sm truncate">{s.name}</div>
-                <div className="text-xs text-gray-500 mt-1">{s.batches} batches</div>
+                <div className="font-medium text-slate-900 text-sm truncate">{s.name}</div>
+                <div className="text-xs text-slate-500 mt-1">{s.batches} batches</div>
                 <div className="text-xs mt-1">
                   <span className="text-blue-600 font-medium">{s.totalSlots} slots/wk</span>
-                  <span className="text-gray-400 ml-1">({s.totalHours.toFixed(1)}h)</span>
+                  <span className="text-slate-400 ml-1">({s.totalHours.toFixed(1)}h)</span>
                 </div>
               </button>
             ))}
@@ -189,78 +189,82 @@ export default function TeachingAssignmentsPage() {
 
         {filterTeacher && (
           <div className="mb-4 flex items-center gap-2">
-            <span className="text-sm text-gray-500">Filtered by:</span>
-            <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded font-medium">
+            <span className="text-sm text-slate-500">Filtered by:</span>
+            <span className="bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-full font-medium">
               {teacherSummary[filterTeacher]?.name}
             </span>
-            <button onClick={() => setFilterTeacher("")} className="text-xs text-gray-400 hover:text-gray-600">Clear</button>
+            <button onClick={() => setFilterTeacher("")} className="text-xs text-slate-400 hover:text-slate-600 transition-colors">Clear</button>
           </div>
         )}
 
         {loading ? (
-          <div className="text-center py-12 text-gray-500">Loading...</div>
+          <div className="py-12 space-y-4">
+            <div className="h-10 skeleton w-full max-w-2xl mx-auto" />
+            <div className="h-10 skeleton w-full max-w-2xl mx-auto opacity-75" />
+            <div className="h-10 skeleton w-full max-w-2xl mx-auto opacity-50" />
+          </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
-            <p className="text-gray-500">No teaching assignments yet.</p>
+          <div className="text-center py-12 bg-white rounded-2xl border border-slate-200 shadow-sm">
+            <p className="text-slate-400">No teaching assignments yet.</p>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-500">Teacher</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-500">Batch</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-500">Subject</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-500">Hours</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-500">Progress</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-500">Duration</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-gray-500">Weekly Plan</th>
-                  <th className="text-right px-4 py-3 text-sm font-medium text-gray-500">Actions</th>
+                <tr className="bg-slate-50/80 border-b border-slate-200">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Teacher</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Batch</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Subject</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Hours</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Progress</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Duration</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Weekly Plan</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((a) => {
                   const progress = a.totalHours > 0 ? (a.completedHours / a.totalHours) * 100 : 0;
                   return (
-                    <tr key={a.id} className="border-b border-gray-100 hover:bg-gray-50">
+                    <tr key={a.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900 text-sm">{a.teacher.user.name}</div>
+                        <div className="font-medium text-slate-900 text-sm">{a.teacher.user.name}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="text-sm text-gray-900">{a.batch.name}</div>
-                        <div className="text-xs text-gray-400">{a.batch.center.name}</div>
+                        <div className="text-sm text-slate-900">{a.batch.name}</div>
+                        <div className="text-xs text-slate-400">{a.batch.center.name}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">{a.subject.code}</span>
+                        <span className="bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full text-xs font-medium">{a.subject.code}</span>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="text-sm font-medium text-gray-900">{a.totalHours}h total</div>
-                        <div className="text-xs text-gray-400">{a.remainingHours}h remaining</div>
+                        <div className="text-sm font-medium text-slate-900">{a.totalHours}h total</div>
+                        <div className="text-xs text-slate-400">{a.remainingHours}h remaining</div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="w-24">
                           <div className="flex justify-between text-xs mb-1">
-                            <span className="text-gray-500">{a.completedHours}h</span>
-                            <span className="text-gray-400">{progress.toFixed(0)}%</span>
+                            <span className="text-slate-500">{a.completedHours}h</span>
+                            <span className="text-slate-400">{progress.toFixed(0)}%</span>
                           </div>
-                          <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                          <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
                             <div className="h-full bg-blue-600 rounded-full transition-all" style={{ width: `${Math.min(progress, 100)}%` }} />
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="text-xs text-gray-600">
+                        <div className="text-xs text-slate-600">
                           {new Date(a.startDate).toLocaleDateString("en-IN", { month: "short", day: "numeric" })} - {new Date(a.endDate).toLocaleDateString("en-IN", { month: "short", day: "numeric" })}
                         </div>
-                        <div className="text-xs text-gray-400">{a.totalWeeks} weeks</div>
+                        <div className="text-xs text-slate-400">{a.totalWeeks} weeks</div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="text-sm font-semibold text-purple-700">{a.slotsPerWeek} slots/wk</div>
-                        <div className="text-xs text-gray-400">{a.hoursPerWeek}h/wk needed</div>
+                        <div className="text-xs text-slate-400">{a.hoursPerWeek}h/wk needed</div>
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <button onClick={() => openEdit(a)} className="text-blue-600 hover:text-blue-800 text-xs font-medium mr-2">Edit</button>
-                        <button onClick={() => handleDelete(a.id)} className="text-red-600 hover:text-red-800 text-xs font-medium">Del</button>
+                        <button onClick={() => openEdit(a)} className="text-blue-600 hover:text-blue-700 transition-colors text-xs font-medium mr-2">Edit</button>
+                        <button onClick={() => handleDelete(a.id)} className="text-red-500 hover:text-red-600 transition-colors text-xs font-medium">Del</button>
                       </td>
                     </tr>
                   );
@@ -275,9 +279,9 @@ export default function TeachingAssignmentsPage() {
             {!editing && (
               <>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Teacher *</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Teacher *</label>
                   <select value={form.teacherId} onChange={(e) => setForm({ ...form, teacherId: e.target.value, subjectId: "" })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" required>
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200" required>
                     <option value="">Select Teacher</option>
                     {teachers.map((t) => (
                       <option key={t.id} value={t.id}>{t.user.name}</option>
@@ -285,9 +289,9 @@ export default function TeachingAssignmentsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Batch *</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Batch *</label>
                   <select value={form.batchId} onChange={(e) => setForm({ ...form, batchId: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" required>
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200" required>
                     <option value="">Select Batch</option>
                     {batches.map((b) => (
                       <option key={b.id} value={b.id}>{b.name}</option>
@@ -295,9 +299,9 @@ export default function TeachingAssignmentsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Subject *</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Subject *</label>
                   <select value={form.subjectId} onChange={(e) => setForm({ ...form, subjectId: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" required>
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200" required>
                     <option value="">Select Subject</option>
                     {teacherSubjects.map((s) => (
                       <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
@@ -311,36 +315,36 @@ export default function TeachingAssignmentsPage() {
             )}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Total Hours *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Total Hours *</label>
                 <input type="number" value={form.totalHours} onChange={(e) => setForm({ ...form, totalHours: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" required min="1" placeholder="300" />
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200" required min="1" placeholder="300" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Completed Hours</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Completed Hours</label>
                 <input type="number" value={form.completedHours} onChange={(e) => setForm({ ...form, completedHours: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" min="0" placeholder="0" />
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200" min="0" placeholder="0" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Start Date *</label>
                 <input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" required />
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200" required />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">End Date *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">End Date *</label>
                 <input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" required />
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200" required />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Notes</label>
               <input type="text" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" placeholder="e.g., IIT-JEE Advanced Maths - high priority" />
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200" placeholder="e.g., IIT-JEE Advanced Maths - high priority" />
             </div>
             <div className="flex gap-3 pt-2">
-              <button type="submit" className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition font-medium">{editing ? "Update" : "Add"} Assignment</button>
-              <button type="button" onClick={() => setModalOpen(false)} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition font-medium">Cancel</button>
+              <button type="submit" className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-2 rounded-lg hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-200 font-medium">{editing ? "Update" : "Add"} Assignment</button>
+              <button type="button" onClick={() => setModalOpen(false)} className="flex-1 bg-slate-100 text-slate-700 py-2 rounded-lg hover:bg-slate-200 transition-all duration-200 font-medium">Cancel</button>
             </div>
           </form>
         </Modal>
