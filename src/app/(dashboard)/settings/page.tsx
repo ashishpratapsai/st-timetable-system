@@ -14,6 +14,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [customPrompt, setCustomPrompt] = useState("");
+  const [savingPrompt, setSavingPrompt] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings")
@@ -28,6 +30,7 @@ export default function SettingsPage() {
           setHasGeminiKey(true);
           setMaskedGeminiKey(data.gemini_api_key_masked);
         }
+        if (data.ai_custom_prompt) setCustomPrompt(data.ai_custom_prompt);
       });
   }, []);
 
@@ -76,6 +79,17 @@ export default function SettingsPage() {
       setTestResult({ success: false, message: "Failed to connect" });
     }
     setTesting(false);
+  }
+
+  async function handleSavePrompt() {
+    setSavingPrompt(true);
+    await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "ai_custom_prompt", value: customPrompt }),
+    });
+    setSavingPrompt(false);
+    alert("AI instructions saved!");
   }
 
   const activeHasKey = provider === "claude" ? hasClaudeKey : hasGeminiKey;
@@ -222,6 +236,28 @@ export default function SettingsPage() {
               {testResult.message}
             </div>
           )}
+        </div>
+
+        {/* AI Custom Prompt */}
+        <div className="bg-white rounded-2xl border border-slate-200/70 shadow p-6 max-w-2xl mt-6">
+          <h2 className="text-lg font-semibold text-slate-900 mb-2">AI Timetable Instructions</h2>
+          <p className="text-sm text-slate-500 mb-4">
+            Add custom instructions for the AI when generating timetables. These will be appended as additional constraints.
+          </p>
+          <textarea
+            value={customPrompt}
+            onChange={(e) => setCustomPrompt(e.target.value)}
+            placeholder="e.g., Put Physics classes in the morning slots. Give Amit Sharma Mondays off. Spread Maths across at least 3 different days."
+            rows={4}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-sm resize-none"
+          />
+          <div className="flex items-center justify-between mt-3">
+            <span className="text-xs text-slate-400">{customPrompt.length}/500 characters</span>
+            <button onClick={handleSavePrompt} disabled={savingPrompt}
+              className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-200 text-sm font-medium disabled:opacity-50">
+              {savingPrompt ? "Saving..." : "Save Instructions"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -8,6 +8,7 @@ const ENTRY_INCLUDE = {
   teacher: { include: { user: { select: { name: true } } } },
   substituteTeacher: { include: { user: { select: { name: true } } } },
   classroom: { include: { center: { select: { name: true } } } },
+  combinedBatch: { select: { id: true, name: true } },
 };
 
 export async function GET(req: NextRequest) {
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
   if (error) return error;
 
   const body = await req.json();
-  const { batchId, subjectId, teacherId, classroomId, dayOfWeek, startTime, endTime, weekStart } = body;
+  const { batchId, subjectId, teacherId, classroomId, dayOfWeek, startTime, endTime, weekStart, classType, combinedBatchId } = body;
 
   if (!batchId || !subjectId || !teacherId || !classroomId || dayOfWeek === undefined || !startTime || !endTime || !weekStart) {
     return NextResponse.json({ error: "All fields are required" }, { status: 400 });
@@ -49,32 +50,36 @@ export async function POST(req: NextRequest) {
 
   const weekDate = new Date(weekStart);
 
-  // Check teacher conflict
-  const teacherConflict = await prisma.timetableEntry.findFirst({
-    where: {
-      teacherId,
-      dayOfWeek,
-      startTime,
-      weekStart: weekDate,
-      status: { in: ["SCHEDULED", "SUBSTITUTED"] },
-    },
-  });
-  if (teacherConflict) {
-    return NextResponse.json({ error: "Teacher is already booked at this time" }, { status: 409 });
-  }
+  // For combined classes, skip teacher and classroom double-booking checks
+  // (same teacher and classroom are intentionally shared across combined batches)
+  if (!combinedBatchId) {
+    // Check teacher conflict
+    const teacherConflict = await prisma.timetableEntry.findFirst({
+      where: {
+        teacherId,
+        dayOfWeek,
+        startTime,
+        weekStart: weekDate,
+        status: { in: ["SCHEDULED", "SUBSTITUTED"] },
+      },
+    });
+    if (teacherConflict) {
+      return NextResponse.json({ error: "Teacher is already booked at this time" }, { status: 409 });
+    }
 
-  // Check classroom conflict
-  const roomConflict = await prisma.timetableEntry.findFirst({
-    where: {
-      classroomId,
-      dayOfWeek,
-      startTime,
-      weekStart: weekDate,
-      status: { in: ["SCHEDULED", "SUBSTITUTED"] },
-    },
-  });
-  if (roomConflict) {
-    return NextResponse.json({ error: "Classroom is already booked at this time" }, { status: 409 });
+    // Check classroom conflict
+    const roomConflict = await prisma.timetableEntry.findFirst({
+      where: {
+        classroomId,
+        dayOfWeek,
+        startTime,
+        weekStart: weekDate,
+        status: { in: ["SCHEDULED", "SUBSTITUTED"] },
+      },
+    });
+    if (roomConflict) {
+      return NextResponse.json({ error: "Classroom is already booked at this time" }, { status: 409 });
+    }
   }
 
   // Check batch conflict (same batch can't have two classes at same time)
@@ -102,6 +107,8 @@ export async function POST(req: NextRequest) {
       endTime,
       weekStart: weekDate,
       status: "SCHEDULED",
+      classType: classType || "ACTUAL",
+      combinedBatchId: combinedBatchId || null,
     },
     include: ENTRY_INCLUDE,
   });

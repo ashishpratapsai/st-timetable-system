@@ -50,6 +50,12 @@ enum LeaveStatus {
   REJECTED
 }
 
+enum ClassType {
+  ACTUAL
+  REVISION
+  DOUBT
+}
+
 model User {
   id        String   @id @default(cuid())
   name      String
@@ -90,6 +96,7 @@ model Teacher {
   user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   shortCode        String?               // e.g., "ASM" for Amit Sharma Maths
   employmentType   EmploymentType        @default(FULL_TIME)
+  hourlyRate       Float?                // Pay rate per hour (₹)
   createdAt        DateTime              @default(now())
   subjects         TeacherSubject[]
   availability     TeacherAvailability[]
@@ -135,6 +142,7 @@ model Batch {
   createdAt        DateTime         @default(now())
   batchSubjects    BatchSubject[]
   timetableEntries TimetableEntry[]
+  combinedEntries  TimetableEntry[] @relation("CombinedBatch")
   teachingAssignments TeachingAssignment[]
   chapterAssignments  ChapterAssignment[]
   subtopicProgress    SubtopicProgress[]
@@ -185,6 +193,8 @@ model TimetableEntry {
   endTime             String
   weekStart           DateTime
   status              EntryStatus @default(SCHEDULED)
+  classType           ClassType   @default(ACTUAL)
+  combinedBatchId     String?     // If set, this is a combined class with another batch
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
@@ -193,6 +203,7 @@ model TimetableEntry {
   teacher           Teacher    @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   classroom         Classroom  @relation(fields: [classroomId], references: [id], onDelete: Cascade)
   substituteTeacher Teacher?   @relation("SubstituteTeacher", fields: [substituteTeacherId], references: [id])
+  combinedBatch     Batch?     @relation("CombinedBatch", fields: [combinedBatchId], references: [id])
 
   substituteAssignments SubstituteAssignment[]
 }
@@ -335,4 +346,11 @@ model SubtopicProgress {
   createdAt   DateTime @default(now())
 
   @@unique([subtopicId, teacherId, batchId])
+}
+
+model PayrollPin {
+  id        String   @id @default(cuid())
+  pinHash   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

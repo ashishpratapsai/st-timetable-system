@@ -31,6 +31,15 @@ export function formatBatchType(type: string) {
   return map[type] || type;
 }
 
+export function formatClassType(type: string) {
+  const map: Record<string, string> = {
+    ACTUAL: "Actual Class",
+    REVISION: "Revision",
+    DOUBT: "Doubt Session",
+  };
+  return map[type] || type;
+}
+
 export const DAYS_OF_WEEK = [
   "Monday",
   "Tuesday",

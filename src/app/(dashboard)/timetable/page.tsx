@@ -12,6 +12,7 @@ interface TimetableEntry {
   startTime: string;
   endTime: string;
   status: string;
+  classType: string;
   batch: { id: string; name: string; batchType: string };
   subject: { id: string; name: string; code: string };
   teacher: { id: string; user: { name: string } };
@@ -215,6 +216,20 @@ export default function TimetablePage() {
               ))}
             </div>
           </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Export</label>
+            <button
+              onClick={() => {
+                const params = new URLSearchParams({ weekStart: selectedWeek });
+                if (selectedCenter) params.set("centerId", selectedCenter);
+                window.open(`/api/timetable/export-pdf?${params}`, "_blank");
+              }}
+              className="bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-lg hover:bg-slate-50 hover:shadow-md transition-all duration-200 text-sm font-medium flex items-center gap-1.5"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+              Export PDF
+            </button>
+          </div>
         </div>
 
         {/* Legend */}
@@ -277,7 +292,15 @@ export default function TimetablePage() {
                             return (
                               <div key={e.id}
                                 className={`${styleClass} border rounded-lg p-2 text-xs mb-1`}>
-                                <div className="font-semibold">{e.subject.code}</div>
+                                <div className="font-semibold">
+                                  {e.subject.code}
+                                  {e.classType === "REVISION" && (
+                                    <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1 rounded ml-1">R</span>
+                                  )}
+                                  {e.classType === "DOUBT" && (
+                                    <span className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded ml-1">D</span>
+                                  )}
+                                </div>
                                 <div className="text-[10px] opacity-80">{e.batch.name}</div>
 
                                 {e.status === "SUBSTITUTED" && e.substituteTeacher ? (

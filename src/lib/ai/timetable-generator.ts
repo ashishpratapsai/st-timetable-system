@@ -115,6 +115,7 @@ function buildPromptForCenter(
   subjectList: string,
   classroomRestrictions: { room: string; day: number; start: string }[],
   teacherLeaveData: { teacher: string; days: number[] }[],
+  customPrompt: string,
 ): string {
   const centerRestrictions = classroomRestrictions.filter((r) =>
     centerClassrooms.some((c) => c.id === r.room)
@@ -141,6 +142,7 @@ RULES:
 - Assignments dictate teacher-batch-subject pairing and slots needed
 - Classroom capacity >= batch strength
 - Spread subjects across the week, balance teacher workload
+${customPrompt ? `\nCUSTOM INSTRUCTIONS FROM ADMIN:\n${customPrompt}` : ""}
 
 Each element: {"batchId":"...","subjectId":"...","teacherId":"...","classroomId":"...","dayOfWeek":0,"startTime":"09:00","endTime":"10:00"}
 ONLY the JSON array. No text, no markdown.`;
@@ -257,6 +259,12 @@ export async function generateTimetable(
     return { teacher: l.teacherId, days: leaveDays };
   });
 
+  // Fetch custom prompt from settings
+  const customPromptSetting = await prisma.settings.findUnique({
+    where: { key: "ai_custom_prompt" },
+  });
+  const customPrompt = customPromptSetting?.value || "";
+
   // ─── Split by center ───
   // Group batches by centerId
   const centerIds = [...new Set(batches.map((b) => b.centerId))];
@@ -310,6 +318,7 @@ export async function generateTimetable(
       subjectList,
       classroomRestrictions,
       teacherLeaveData,
+      customPrompt,
     );
 
     console.log(`Generating for center ${cid}: ${centerBatches.length} batches, ${centerAssignments.length} assignments`);

@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
         dayOfWeek: number;
         startTime: string;
         endTime: string;
+        classType?: string;
       }) => ({
         batchId: e.batchId,
         subjectId: e.subjectId,
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest) {
         endTime: e.endTime,
         weekStart: weekDate,
         status: "SCHEDULED",
+        classType: e.classType || "ACTUAL",
       })
     ),
   });

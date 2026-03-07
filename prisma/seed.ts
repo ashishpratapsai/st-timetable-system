@@ -5,6 +5,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   // Clear existing data in reverse dependency order
+  await prisma.payrollPin.deleteMany();
   await prisma.teachingAssignment.deleteMany();
   await prisma.substituteAssignment.deleteMany();
   await prisma.leave.deleteMany();
@@ -113,6 +114,7 @@ async function main() {
       userId: allTeacherUsers[0].userId,
       shortCode: "RKP",
       employmentType: "FULL_TIME",
+      hourlyRate: 1200,
       subjects: { create: [{ subjectId: subPhysics.id }] },
     },
   });
@@ -123,6 +125,7 @@ async function main() {
       userId: allTeacherUsers[1].userId,
       shortCode: "SVC",
       employmentType: "FULL_TIME",
+      hourlyRate: 1200,
       subjects: { create: [{ subjectId: subChemistry.id }] },
     },
   });
@@ -133,6 +136,7 @@ async function main() {
       userId: allTeacherUsers[2].userId,
       shortCode: "ASM",
       employmentType: "PART_TIME",
+      hourlyRate: 1000,
       subjects: { create: [{ subjectId: subMaths.id }] },
     },
   });
@@ -143,6 +147,7 @@ async function main() {
       userId: allTeacherUsers[3].userId,
       shortCode: "PNB",
       employmentType: "PART_TIME",
+      hourlyRate: 1000,
       subjects: { create: [{ subjectId: subBiology.id }, { subjectId: subChemistry.id }] },
     },
   });
@@ -153,6 +158,7 @@ async function main() {
       userId: allTeacherUsers[4].userId,
       shortCode: "VSP",
       employmentType: "PART_TIME",
+      hourlyRate: 1000,
       subjects: { create: [{ subjectId: subPhysics.id }, { subjectId: subMaths.id }] },
     },
   });
@@ -163,6 +169,7 @@ async function main() {
       userId: allTeacherUsers[5].userId,
       shortCode: "NGM",
       employmentType: "FULL_TIME",
+      hourlyRate: 800,
       subjects: { create: [{ subjectId: subMaths.id }, { subjectId: subScience.id }] },
     },
   });
@@ -173,6 +180,7 @@ async function main() {
       userId: allTeacherUsers[6].userId,
       shortCode: "RSS",
       employmentType: "FULL_TIME",
+      hourlyRate: 800,
       subjects: { create: [{ subjectId: subScience.id }, { subjectId: subPhysics.id }] },
     },
   });
@@ -183,6 +191,7 @@ async function main() {
       userId: allTeacherUsers[7].userId,
       shortCode: "ADE",
       employmentType: "FULL_TIME",
+      hourlyRate: 800,
       subjects: { create: [{ subjectId: subEnglish.id }, { subjectId: subSST.id }] },
     },
   });
@@ -193,6 +202,7 @@ async function main() {
       userId: allTeacherUsers[8].userId,
       shortCode: "SPM",
       employmentType: "PART_TIME",
+      hourlyRate: 600,
       subjects: { create: [{ subjectId: subMaths.id }, { subjectId: subEnglish.id }] },
     },
   });
@@ -203,6 +213,7 @@ async function main() {
       userId: allTeacherUsers[9].userId,
       shortCode: "MJS",
       employmentType: "PART_TIME",
+      hourlyRate: 600,
       subjects: { create: [{ subjectId: subScience.id }, { subjectId: subSST.id }] },
     },
   });
