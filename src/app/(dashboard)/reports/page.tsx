@@ -31,7 +31,7 @@ export default function ReportsPage() {
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight mb-6">Reports & Analytics</h1>
 
         {/* Faculty Utilization */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-6">
+        <div className="bg-white rounded-2xl border border-slate-200/70 shadow p-6 mb-6">
           <h2 className="text-lg font-semibold text-slate-900 mb-4">Faculty Utilization</h2>
           {loading ? (
             <div className="py-12 space-y-4">

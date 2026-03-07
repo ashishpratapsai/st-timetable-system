@@ -66,7 +66,7 @@ export default function TimeSlotsPage() {
             <div className="h-10 skeleton w-full max-w-2xl mx-auto opacity-50" />
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-200/70 shadow overflow-hidden">
             <table className="w-full">
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-200">

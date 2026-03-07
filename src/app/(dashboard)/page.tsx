@@ -83,7 +83,7 @@ export default function DashboardPage() {
         )}
 
         {!isAdmin && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center shadow-sm">
+          <div className="bg-white rounded-2xl border border-slate-200/70 p-8 text-center shadow">
             <p className="text-slate-400">
               Your timetable and schedule information will appear here.
             </p>
@@ -117,7 +117,7 @@ function StatCard({
   const s = styles[color] || styles.blue;
 
   return (
-    <div className={`bg-gradient-to-br ${s.bg} rounded-2xl border border-slate-200/80 p-6 card-hover shadow-sm`}>
+    <div className={`bg-gradient-to-br ${s.bg} rounded-2xl border border-slate-200/70 p-6 card-hover shadow`}>
       <div className="flex items-center justify-between mb-4">
         <div className={`w-11 h-11 rounded-xl ${s.iconBg} ${s.iconText} flex items-center justify-center`}>
           {icon}

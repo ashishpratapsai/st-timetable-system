@@ -352,7 +352,7 @@ export default function ManualTimetablePage() {
         <div className="flex gap-4">
           {/* ─── Main Grid ─── */}
           <div className="flex-1 overflow-auto">
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-auto">
+            <div className="bg-white rounded-2xl border border-slate-200/70 shadow-md overflow-auto">
               <table className="w-full min-w-[800px]">
                 <thead>
                   <tr className="bg-slate-50/80 border-b border-slate-200">
@@ -430,7 +430,7 @@ export default function ManualTimetablePage() {
 
           {/* ─── Sidebar: Assignment Cards ─── */}
           <div className="w-72 flex-shrink-0">
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 sticky top-4 max-h-[calc(100vh-160px)] overflow-y-auto">
+            <div className="bg-white rounded-2xl border border-slate-200/70 shadow-md p-3 sticky top-4 max-h-[calc(100vh-160px)] overflow-y-auto">
               <h3 className="font-semibold text-slate-900 text-sm mb-3">Teaching Assignments</h3>
               <p className="text-[10px] text-slate-400 mb-3">Drag cards to the grid to schedule</p>
 

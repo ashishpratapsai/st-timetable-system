@@ -87,7 +87,7 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight mb-6">Settings</h1>
 
         {/* Provider Selection */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 max-w-2xl mb-6">
+        <div className="bg-white rounded-2xl border border-slate-200/70 shadow p-6 max-w-2xl mb-6">
           <h2 className="text-lg font-semibold text-slate-900 mb-2">AI Provider</h2>
           <p className="text-sm text-slate-500 mb-4">
             Choose which AI model to use for timetable generation.
@@ -139,7 +139,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Gemini API Key */}
-        <div className={`bg-white rounded-2xl border border-slate-200 shadow-sm p-6 max-w-2xl mb-6 ${provider !== "gemini" ? "opacity-60" : ""}`}>
+        <div className={`bg-white rounded-2xl border border-slate-200/70 shadow p-6 max-w-2xl mb-6 ${provider !== "gemini" ? "opacity-60" : ""}`}>
           <h2 className="text-lg font-semibold text-slate-900 mb-2">Gemini API Key</h2>
           <p className="text-sm text-slate-500 mb-4">
             Get a free API key from{" "}
@@ -172,7 +172,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Claude API Key */}
-        <div className={`bg-white rounded-2xl border border-slate-200 shadow-sm p-6 max-w-2xl mb-6 ${provider !== "claude" ? "opacity-60" : ""}`}>
+        <div className={`bg-white rounded-2xl border border-slate-200/70 shadow p-6 max-w-2xl mb-6 ${provider !== "claude" ? "opacity-60" : ""}`}>
           <h2 className="text-lg font-semibold text-slate-900 mb-2">Claude API Key</h2>
           <p className="text-sm text-slate-500 mb-4">
             Get your key from{" "}
@@ -205,7 +205,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Test Connection */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 max-w-2xl">
+        <div className="bg-white rounded-2xl border border-slate-200/70 shadow p-6 max-w-2xl">
           <h2 className="text-lg font-semibold text-slate-900 mb-2">Test Connection</h2>
           <p className="text-sm text-slate-500 mb-4">
             Test the currently selected provider ({provider === "gemini" ? "Gemini" : "Claude"}).

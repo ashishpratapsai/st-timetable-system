@@ -238,7 +238,7 @@ export default function TimetablePage() {
             <div className="h-10 skeleton w-full max-w-2xl mx-auto opacity-50" />
           </div>
         ) : entries.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 shadow-sm">
+          <div className="text-center py-16 bg-white rounded-2xl border border-slate-200/70 shadow">
             <p className="text-slate-400 text-lg mb-2">No timetable for this week</p>
             {isAdmin && (
               <p className="text-slate-400 text-sm">
@@ -247,7 +247,7 @@ export default function TimetablePage() {
             )}
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-auto">
+          <div className="bg-white rounded-2xl border border-slate-200/70 shadow overflow-auto">
             <table className="w-full min-w-[900px]">
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-200">

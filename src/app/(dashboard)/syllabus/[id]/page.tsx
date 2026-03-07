@@ -387,7 +387,7 @@ export default function SyllabusDetailPage({ params }: { params: Promise<{ id: s
             </div>
 
             {syllabus.chapters.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <div className="text-center py-12 bg-white rounded-2xl border border-slate-200/70 shadow">
                 <p className="text-slate-400">No chapters yet.</p>
                 <p className="text-slate-400 text-sm mt-1">Add chapters manually or use Bulk Import.</p>
               </div>
@@ -400,7 +400,7 @@ export default function SyllabusDetailPage({ params }: { params: Promise<{ id: s
                   const isExpanded = expanded.has(ch.id);
 
                   return (
-                    <div key={ch.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div key={ch.id} className="bg-white rounded-2xl border border-slate-200/70 shadow overflow-hidden">
                       <div className="flex items-center justify-between px-5 py-3 cursor-pointer hover:bg-slate-50/50 transition-colors"
                         onClick={() => toggleExpand(ch.id)}>
                         <div className="flex items-center gap-3">
@@ -492,17 +492,17 @@ export default function SyllabusDetailPage({ params }: { params: Promise<{ id: s
             </div>
 
             {batches.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <div className="text-center py-12 bg-white rounded-2xl border border-slate-200/70 shadow">
                 <p className="text-slate-400">No batches of type {BATCH_LABELS[syllabus.batchType] || syllabus.batchType} exist.</p>
                 <p className="text-slate-400 text-sm mt-1">Create a batch first before assigning chapters.</p>
               </div>
             ) : teachers.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <div className="text-center py-12 bg-white rounded-2xl border border-slate-200/70 shadow">
                 <p className="text-slate-400">No teachers are qualified for {syllabus.subject.name}.</p>
                 <p className="text-slate-400 text-sm mt-1">Add subject expertise to teachers first.</p>
               </div>
             ) : (
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="bg-white rounded-2xl border border-slate-200/70 shadow overflow-hidden">
                 <table className="w-full">
                   <thead>
                     <tr className="bg-slate-50/80 border-b border-slate-200">
@@ -553,14 +553,14 @@ export default function SyllabusDetailPage({ params }: { params: Promise<{ id: s
         {tab === "progress" && (
           <div>
             {report.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <div className="text-center py-12 bg-white rounded-2xl border border-slate-200/70 shadow">
                 <p className="text-slate-400">No progress data yet.</p>
                 <p className="text-slate-400 text-sm mt-1">Assign chapters to teachers and they can start marking subtopics as complete.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {report.map((t) => (
-                  <div key={`${t.teacherId}_${t.batchId}`} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                  <div key={`${t.teacherId}_${t.batchId}`} className="bg-white rounded-2xl border border-slate-200/70 shadow p-5">
                     <div className="flex justify-between items-start mb-1">
                       <h3 className="font-semibold text-slate-900">{t.teacherName}</h3>
                       <span className={`text-lg font-bold ${t.percentComplete === 100 ? "text-green-600" : "text-blue-600"}`}>

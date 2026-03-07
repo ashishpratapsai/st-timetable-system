@@ -166,24 +166,24 @@ export default function AvailabilityPage({ params }: { params: Promise<{ id: str
 
         {/* Availability Summary */}
         <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+          <div className="bg-white rounded-2xl border border-slate-200/70 shadow p-4">
             <div className="text-sm text-slate-500 mb-1">Available Days</div>
             <div className="text-lg font-bold text-slate-900">{summary.daysAvailable.length} days/week</div>
             <div className="text-xs text-slate-400 mt-1">{summary.daysAvailable.join(", ") || "None set"}</div>
           </div>
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+          <div className="bg-white rounded-2xl border border-slate-200/70 shadow p-4">
             <div className="text-sm text-slate-500 mb-1">Total Available Slots</div>
             <div className="text-lg font-bold text-slate-900">{summary.totalSlots} slots/week</div>
             <div className="text-xs text-slate-400 mt-1">{summary.totalSlots} x 1.5h each</div>
           </div>
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+          <div className="bg-white rounded-2xl border border-slate-200/70 shadow p-4">
             <div className="text-sm text-slate-500 mb-1">Total Available Hours</div>
             <div className="text-lg font-bold text-slate-900">{summary.totalHours} hrs/week</div>
             <div className="text-xs text-slate-400 mt-1">Maximum teachable hours</div>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-auto">
+        <div className="bg-white rounded-2xl border border-slate-200/70 shadow overflow-auto">
           <table className="w-full">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-200">

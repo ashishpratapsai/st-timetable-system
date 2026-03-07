@@ -167,11 +167,11 @@ export default function ClassroomsPage() {
         ) : tab === "classrooms" ? (
           /* Classrooms Table */
           classrooms.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 shadow-sm">
+            <div className="text-center py-16 bg-white rounded-2xl border border-slate-200/70 shadow">
               <p className="text-slate-400">No classrooms yet.</p>
             </div>
           ) : (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-200/70 shadow overflow-hidden">
               <table className="w-full">
                 <thead>
                   <tr className="bg-slate-50/80 border-b border-slate-200">
@@ -208,12 +208,12 @@ export default function ClassroomsPage() {
         ) : (
           /* Availability Blocks Table */
           blocks.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 shadow-sm">
+            <div className="text-center py-16 bg-white rounded-2xl border border-slate-200/70 shadow">
               <p className="text-slate-400">No classroom blocks. All classrooms are available.</p>
               <p className="text-slate-400 text-sm mt-1">Block a classroom to mark it unavailable for a specific date and time.</p>
             </div>
           ) : (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-200/70 shadow overflow-hidden">
               <table className="w-full">
                 <thead>
                   <tr className="bg-slate-50/80 border-b border-slate-200">

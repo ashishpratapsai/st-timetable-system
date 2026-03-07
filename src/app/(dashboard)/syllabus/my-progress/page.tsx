@@ -121,19 +121,19 @@ export default function MyProgressPage() {
         {/* Summary */}
         {!loading && data.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+            <div className="bg-white rounded-2xl border border-slate-200/70 shadow p-4">
               <div className="text-2xl font-bold text-slate-900">{totalAssigned}</div>
               <div className="text-xs text-slate-500">Assigned Chapters</div>
             </div>
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+            <div className="bg-white rounded-2xl border border-slate-200/70 shadow p-4">
               <div className="text-2xl font-bold text-green-600">{completedChapters}</div>
               <div className="text-xs text-slate-500">Completed Chapters</div>
             </div>
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+            <div className="bg-white rounded-2xl border border-slate-200/70 shadow p-4">
               <div className="text-2xl font-bold text-blue-600">{completedSubtopics}/{totalSubtopics}</div>
               <div className="text-xs text-slate-500">Subtopics Done</div>
             </div>
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+            <div className="bg-white rounded-2xl border border-slate-200/70 shadow p-4">
               <div className="flex items-end gap-2">
                 <div className="text-2xl font-bold text-slate-900">{overallPercent}%</div>
               </div>
@@ -153,7 +153,7 @@ export default function MyProgressPage() {
             <div className="h-10 skeleton w-full max-w-2xl mx-auto opacity-50" />
           </div>
         ) : data.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 shadow-sm">
+          <div className="text-center py-16 bg-white rounded-2xl border border-slate-200/70 shadow">
             <p className="text-slate-400 text-lg mb-2">No syllabi assigned to you</p>
             <p className="text-slate-400 text-sm">Your admin will assign chapters from the syllabus management page.</p>
           </div>
@@ -165,7 +165,7 @@ export default function MyProgressPage() {
               const sylPercent = sylTotal > 0 ? Math.round((sylCompleted / sylTotal) * 100) : 0;
 
               return (
-                <div key={`${syl.syllabusId}_${syl.batchId}`} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div key={`${syl.syllabusId}_${syl.batchId}`} className="bg-white rounded-2xl border border-slate-200/70 shadow overflow-hidden">
                   <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center">
                     <div>
                       <h2 className="font-semibold text-slate-900">{syl.syllabusName}</h2>

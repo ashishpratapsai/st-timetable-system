@@ -132,13 +132,13 @@ export default function BatchesPage() {
             <div className="h-10 skeleton w-full max-w-2xl mx-auto opacity-50" />
           </div>
         ) : batches.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 shadow-sm">
+          <div className="text-center py-16 bg-white rounded-2xl border border-slate-200/70 shadow">
             <p className="text-slate-400">No batches yet.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {batches.map((b) => (
-              <div key={b.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+              <div key={b.id} className="bg-white rounded-2xl border border-slate-200/70 shadow p-5">
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <h3 className="font-semibold text-slate-900">{b.name}</h3>

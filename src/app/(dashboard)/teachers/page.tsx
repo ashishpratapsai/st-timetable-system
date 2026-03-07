@@ -119,11 +119,11 @@ export default function TeachersPage() {
             <div className="h-10 skeleton w-full max-w-2xl mx-auto opacity-50" />
           </div>
         ) : teachers.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 shadow-sm">
+          <div className="text-center py-16 bg-white rounded-2xl border border-slate-200/70 shadow">
             <p className="text-slate-400">No teachers yet.</p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+          <div className="bg-white rounded-2xl border border-slate-200/70 shadow overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-200">
