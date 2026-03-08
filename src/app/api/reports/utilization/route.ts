@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/utils";
+import { requireAdmin, getSlotDurationHours } from "@/lib/utils";
 
 export async function GET() {
   const { error } = await requireAdmin();
@@ -9,14 +9,21 @@ export async function GET() {
   const teachers = await prisma.teacher.findMany({
     include: {
       user: { select: { name: true } },
-      timetableEntries: { where: { status: "SCHEDULED" } },
+      timetableEntries: {
+        where: { status: "SCHEDULED" },
+        select: { startTime: true, endTime: true },
+      },
       leaves: true,
     },
   });
 
   const utilization = teachers.map((t) => ({
     name: t.user.name,
-    scheduledHours: t.timetableEntries.length * 1.5, // Each entry = 1.5 hours
+    scheduledHours: Math.round(
+      t.timetableEntries.reduce(
+        (sum, e) => sum + getSlotDurationHours(e.startTime, e.endTime), 0
+      ) * 10
+    ) / 10,
     totalLeaves: t.leaves.length,
     pendingLeaves: t.leaves.filter((l) => l.status === "PENDING").length,
   }));

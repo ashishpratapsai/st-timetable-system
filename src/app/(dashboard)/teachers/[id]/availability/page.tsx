@@ -81,7 +81,7 @@ export default function AvailabilityPage({ params }: { params: Promise<{ id: str
   async function handleSave() {
     setSaving(true);
     const entries: AvailabilityEntry[] = [];
-    for (let day = 0; day < 6; day++) {
+    for (let day = 0; day < 7; day++) {
       for (const slot of slots) {
         const key = `${day}-${slot.startTime}`;
         entries.push({
@@ -109,7 +109,7 @@ export default function AvailabilityPage({ params }: { params: Promise<{ id: str
     let totalSlots = 0;
     let totalHours = 0;
 
-    for (let day = 0; day < 6; day++) {
+    for (let day = 0; day < 7; day++) {
       let dayHasSlot = false;
       for (const slot of slots) {
         const key = `${day}-${slot.startTime}`;
@@ -174,7 +174,7 @@ export default function AvailabilityPage({ params }: { params: Promise<{ id: str
           <div className="bg-white rounded-2xl border border-slate-200/70 shadow p-4">
             <div className="text-sm text-slate-500 mb-1">Total Available Slots</div>
             <div className="text-lg font-bold text-slate-900">{summary.totalSlots} slots/week</div>
-            <div className="text-xs text-slate-400 mt-1">{summary.totalSlots} x 1.5h each</div>
+            <div className="text-xs text-slate-400 mt-1">{summary.totalSlots} slots &middot; {summary.totalHours ? (summary.totalHours / summary.totalSlots).toFixed(1) : "0"}h avg each</div>
           </div>
           <div className="bg-white rounded-2xl border border-slate-200/70 shadow p-4">
             <div className="text-sm text-slate-500 mb-1">Total Available Hours</div>
@@ -188,7 +188,7 @@ export default function AvailabilityPage({ params }: { params: Promise<{ id: str
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-200">
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider sticky left-0 bg-slate-50/80">Time Slot</th>
-                {DAYS_OF_WEEK.slice(0, 6).map((day, i) => (
+                {DAYS_OF_WEEK.slice(0, 7).map((day, i) => (
                   <th key={i} className="text-center px-2 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider min-w-[110px]">
                     <div>{day}</div>
                     <div className="flex gap-1 justify-center mt-1">
@@ -207,7 +207,7 @@ export default function AvailabilityPage({ params }: { params: Promise<{ id: str
                     <div>{slot.label}</div>
                     <div className="text-xs text-slate-400">{slot.startTime} - {slot.endTime}</div>
                   </td>
-                  {DAYS_OF_WEEK.slice(0, 6).map((_, dayIndex) => {
+                  {DAYS_OF_WEEK.slice(0, 7).map((_, dayIndex) => {
                     const key = `${dayIndex}-${slot.startTime}`;
                     const isAvailable = availability[key] ?? false;
                     return (

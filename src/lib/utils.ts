@@ -49,3 +49,10 @@ export const DAYS_OF_WEEK = [
   "Saturday",
   "Sunday",
 ];
+
+/** Calculate slot duration in hours from "HH:MM" start/end times */
+export function getSlotDurationHours(startTime: string, endTime: string): number {
+  const [sh, sm] = startTime.split(":").map(Number);
+  const [eh, em] = endTime.split(":").map(Number);
+  return (eh * 60 + em - sh * 60 - sm) / 60;
+}

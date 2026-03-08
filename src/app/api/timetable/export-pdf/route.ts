@@ -4,7 +4,7 @@ import { requireAuth } from "@/lib/utils";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 const ENTRY_INCLUDE = {
   batch: { select: { id: true, name: true, batchType: true } },
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
   for (const slot of timeSlots) {
     const row: string[] = [`${slot.startTime}-${slot.endTime}`];
 
-    for (let dayIndex = 0; dayIndex < 6; dayIndex++) {
+    for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
       const dayEntries = entryMap[String(dayIndex)]?.[slot.startTime] || [];
 
       if (dayEntries.length === 0) {

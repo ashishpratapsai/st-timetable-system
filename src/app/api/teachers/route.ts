@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireAdmin, requireAuth } from "@/lib/utils";
+import { requireAdmin, requireAuth, getSlotDurationHours } from "@/lib/utils";
 import { hash } from "bcryptjs";
 
 export async function GET() {
@@ -18,18 +18,19 @@ export async function GET() {
   });
 
   // Add availability summary to each teacher
-  const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const teachersWithSummary = teachers.map((t) => {
     const availDays = new Set(t.availability.map((a) => a.dayOfWeek));
     const totalSlots = t.availability.length;
-    // Each slot is 1.5 hours
-    const totalHours = totalSlots * 1.5;
+    const totalHours = t.availability.reduce(
+      (sum, a) => sum + getSlotDurationHours(a.startTime, a.endTime), 0
+    );
     return {
       ...t,
       availabilitySummary: {
         days: Array.from(availDays).sort().map((d) => DAYS[d]),
         totalSlots,
-        totalHours,
+        totalHours: Math.round(totalHours * 10) / 10,
       },
     };
   });

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireAdmin, requireAuth } from "@/lib/utils";
+import { requireAdmin, requireAuth, getSlotDurationHours } from "@/lib/utils";
 
 export async function GET() {
   const { error } = await requireAuth();
@@ -26,6 +26,12 @@ export async function GET() {
     ],
   });
 
+  // Fetch time slots to calculate average slot duration dynamically
+  const timeSlots = await prisma.timeSlot.findMany();
+  const avgSlotHours = timeSlots.length > 0
+    ? timeSlots.reduce((sum, s) => sum + getSlotDurationHours(s.startTime, s.endTime), 0) / timeSlots.length
+    : 1.5;
+
   // Calculate weekly slots needed for each assignment
   const enriched = assignments.map((a) => {
     const startDate = new Date(a.startDate);
@@ -33,7 +39,7 @@ export async function GET() {
     const totalWeeks = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)));
     const remainingHours = a.totalHours - a.completedHours;
     const hoursPerWeek = remainingHours / totalWeeks;
-    const slotsPerWeek = Math.ceil(hoursPerWeek / 1.5); // Each slot is 1.5 hours
+    const slotsPerWeek = Math.ceil(hoursPerWeek / avgSlotHours);
 
     return {
       ...a,

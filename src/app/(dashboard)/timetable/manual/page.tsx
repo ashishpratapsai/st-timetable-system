@@ -263,7 +263,7 @@ export default function ManualTimetablePage() {
 
   function getWeekDates() {
     const start = new Date(selectedWeek);
-    return DAYS_OF_WEEK.slice(0, 6).map((day, i) => ({
+    return DAYS_OF_WEEK.slice(0, 7).map((day, i) => ({
       day,
       date: format(addDays(start, i), "MMM d"),
     }));

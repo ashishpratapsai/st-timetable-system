@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from "@/lib/db";
 import { BatchType } from "@prisma/client";
+import { getSlotDurationHours } from "@/lib/utils";
 
 // ─── Types ───
 
@@ -55,7 +56,7 @@ interface GenerationResult {
 // ─── Constants ───
 
 const SENIOR_BATCH_TYPES = new Set(["IIT_JEE", "JEE_MAINS", "NEET"]);
-const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 // ─── AI Provider ───
 
@@ -171,7 +172,7 @@ function buildDayPlanningPrompt(
   for (const a of assignments) {
     if (teacherDays[a.teacherId]) continue;
     const days = new Set<number>();
-    for (let d = 0; d < 6; d++) {
+    for (let d = 0; d < 7; d++) {
       // Check if teacher is available on at least one slot this day
       const dayKey = `${d}`;
       const avail = availabilityMap[a.teacherId] || {};
@@ -228,7 +229,7 @@ ${lines.join("\n")}
 TEACHER WORKLOAD SUMMARY (spread classes across enough days!):
 ${workloadLines.join("\n")}
 
-DAYS: Mon=0, Tue=1, Wed=2, Thu=3, Fri=4, Sat=5
+DAYS: Mon=0, Tue=1, Wed=2, Thu=3, Fri=4, Sat=5, Sun=6
 
 SCHEDULING MODEL:
 - Classes are scheduled in CONSECUTIVE BLOCKS (2-3 slots back-to-back per day for each teacher-batch).
@@ -450,7 +451,7 @@ function scheduleFromAIPlan(
     const assignment = assignments.find((a) => a.index === plan.a);
     if (!assignment) continue;
 
-    const days = [...new Set(plan.d)].filter((d) => d >= 0 && d <= 5);
+    const days = [...new Set(plan.d)].filter((d) => d >= 0 && d <= 6);
     workGroups.push({ assignment, days });
   }
 
@@ -519,7 +520,7 @@ function scheduleFromAIPlan(
     // Phase B: Fallback — try all other days for remaining slots
     if (remainingSlots > 0) {
       const triedDays = new Set(days);
-      const fallbackDays = [0, 1, 2, 3, 4, 5].filter((d) => !triedDays.has(d));
+      const fallbackDays = [0, 1, 2, 3, 4, 5, 6].filter((d) => !triedDays.has(d));
 
       for (const altDay of fallbackDays) {
         if (remainingSlots <= 0) break;
@@ -705,7 +706,7 @@ export async function generateTimetable(
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const day = d.getDay();
       const adjustedDay = day === 0 ? 6 : day - 1; // Convert Sun=0..Sat=6 to Mon=0..Sun=6
-      if (adjustedDay < 6) leaveDayMap[l.teacherId].push(adjustedDay);
+      if (adjustedDay < 7) leaveDayMap[l.teacherId].push(adjustedDay);
     }
   }
 
@@ -725,7 +726,10 @@ export async function generateTimetable(
     const totalWeeks = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)));
     const remainingHours = a.totalHours - a.completedHours;
     const hoursPerWeek = remainingHours / totalWeeks;
-    const slotsPerWeek = Math.max(1, Math.ceil(hoursPerWeek / 1.5));
+    const avgSlotHours = timeSlots.length > 0
+      ? timeSlots.reduce((sum, s) => sum + getSlotDurationHours(s.startTime, s.endTime), 0) / timeSlots.length
+      : 1.5;
+    const slotsPerWeek = Math.max(1, Math.ceil(hoursPerWeek / avgSlotHours));
 
     const teacher = teachers.find((t) => t.id === a.teacherId);
 
@@ -783,7 +787,7 @@ export async function generateTimetable(
     if (!plannedIndices.has(assignment.index)) {
       // Fallback: spread across available days
       const availDays: number[] = [];
-      for (let d = 0; d < 6; d++) {
+      for (let d = 0; d < 7; d++) {
         if (leaveDayMap[assignment.teacherId]?.includes(d)) continue;
         const avail = availabilityMap[assignment.teacherId] || {};
         for (const key of Object.keys(avail)) {

@@ -205,7 +205,7 @@ export default function LeavesPage() {
     setQuickLoading(false);
   }
 
-  const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
   return (
     <div>

@@ -44,7 +44,7 @@ export async function findSubstitutesForLeave(leaveId: string) {
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     const day = d.getDay();
     const adjustedDay = day === 0 ? 6 : day - 1; // Convert to Mon=0
-    if (adjustedDay < 6) affectedDays.push(adjustedDay);
+    if (adjustedDay < 7) affectedDays.push(adjustedDay);
   }
 
   const affectedEntries = await prisma.timetableEntry.findMany({

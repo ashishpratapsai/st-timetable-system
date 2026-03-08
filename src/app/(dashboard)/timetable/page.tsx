@@ -61,7 +61,7 @@ const SUBJECT_COLORS: Record<string, string> = {
   ENG: "bg-pink-100 text-pink-800 border-pink-200",
 };
 
-const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function TimetablePage() {
   const { data: session } = useSession();
@@ -240,7 +240,7 @@ export default function TimetablePage() {
 
   function getWeekDates() {
     const start = new Date(selectedWeek);
-    return DAYS_OF_WEEK.slice(0, 6).map((day, i) => ({
+    return DAYS_OF_WEEK.slice(0, 7).map((day, i) => ({
       day,
       date: format(addDays(start, i), "MMM d"),
     }));
