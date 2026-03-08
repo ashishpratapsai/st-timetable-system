@@ -16,7 +16,7 @@ export async function GET() {
 
   const utilization = teachers.map((t) => ({
     name: t.user.name,
-    scheduledHours: t.timetableEntries.length, // Each entry = 1 hour
+    scheduledHours: t.timetableEntries.length * 1.5, // Each entry = 1.5 hours
     totalLeaves: t.leaves.length,
     pendingLeaves: t.leaves.filter((l) => l.status === "PENDING").length,
   }));

@@ -30,8 +30,11 @@ interface UnscheduledItem {
 
 interface Center { id: string; name: string; }
 interface TimeSlot { id: string; startTime: string; endTime: string; label: string; order: number; }
-interface BatchOption { id: string; name: string; }
+interface BatchOption { id: string; name: string; batchType: string; }
 interface TeacherOption { id: string; name: string; }
+
+type Scope = "senior" | "junior" | "all";
+const SENIOR_BATCH_TYPES = ["IIT_JEE", "JEE_MAINS", "NEET"];
 
 // Guided questionnaire options for AI generation
 interface GeneratePreferences {
@@ -77,6 +80,7 @@ export default function TimetablePage() {
   const [selectedCenter, setSelectedCenter] = useState("");
   const [selectedBatch, setSelectedBatch] = useState("");
   const [selectedTeacher, setSelectedTeacher] = useState("");
+  const [selectedScope, setSelectedScope] = useState<Scope>("all");
   const [batches, setBatches] = useState<BatchOption[]>([]);
   const [teachers, setTeachers] = useState<TeacherOption[]>([]);
 
@@ -103,19 +107,34 @@ export default function TimetablePage() {
     setEntries(e);
     setCenters(c);
     setTimeSlots(s);
-    setBatches((b || []).map((batch: { id: string; name: string }) => ({ id: batch.id, name: batch.name })));
+    setBatches((b || []).map((batch: { id: string; name: string; batchType: string }) => ({ id: batch.id, name: batch.name, batchType: batch.batchType })));
     setTeachers((t || []).map((teacher: { id: string; user: { name: string } }) => ({ id: teacher.id, name: teacher.user.name })));
     setLoading(false);
   }
 
   useEffect(() => { fetchData(); }, [selectedWeek, selectedCenter]);
 
-  // Filter entries based on selected batch AND/OR teacher
+  // Filter entries based on scope + selected batch AND/OR teacher
   const filteredEntries = entries.filter((e) => {
+    if (selectedScope === "senior" && !SENIOR_BATCH_TYPES.includes(e.batch.batchType)) return false;
+    if (selectedScope === "junior" && SENIOR_BATCH_TYPES.includes(e.batch.batchType)) return false;
     if (selectedBatch && e.batch.id !== selectedBatch) return false;
     if (selectedTeacher && e.teacher.id !== selectedTeacher) return false;
     return true;
   });
+
+  // Filter batch/teacher dropdowns by scope
+  const scopedBatches = batches.filter((b) => {
+    if (selectedScope === "senior") return SENIOR_BATCH_TYPES.includes(b.batchType);
+    if (selectedScope === "junior") return !SENIOR_BATCH_TYPES.includes(b.batchType);
+    return true;
+  });
+  const scopedTeacherIds = new Set(
+    filteredEntries.map((e) => e.teacher.id)
+  );
+  const scopedTeachers = selectedScope === "all"
+    ? teachers
+    : teachers.filter((t) => scopedTeacherIds.has(t.id));
 
   function openGenerateModal() {
     setGeneratePrefs({ ...DEFAULT_PREFERENCES });
@@ -185,7 +204,7 @@ export default function TimetablePage() {
       const res = await fetch("/api/timetable/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ centerId: selectedCenter || null, weekStart: selectedWeek }),
+        body: JSON.stringify({ centerId: selectedCenter || null, weekStart: selectedWeek, scope: selectedScope }),
       });
 
       const data = await res.json();
@@ -201,7 +220,7 @@ export default function TimetablePage() {
         await fetch("/api/timetable/save", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ entries: data.entries, weekStart: selectedWeek }),
+          body: JSON.stringify({ entries: data.entries, weekStart: selectedWeek, scope: selectedScope }),
         });
       }
 
@@ -298,6 +317,27 @@ export default function TimetablePage() {
           )}
         </div>
 
+        {/* Scope Tabs */}
+        <div className="flex gap-1 mb-4 bg-slate-100 p-1 rounded-xl w-fit">
+          {([
+            { val: "all" as Scope, label: "All" },
+            { val: "senior" as Scope, label: "Senior (11th-12th)" },
+            { val: "junior" as Scope, label: "Junior (8th-10th)" },
+          ]).map((tab) => (
+            <button
+              key={tab.val}
+              onClick={() => { setSelectedScope(tab.val); setSelectedBatch(""); setSelectedTeacher(""); }}
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${
+                selectedScope === tab.val
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         {/* Filters */}
         <div className="bg-white border border-slate-200/70 rounded-xl p-3 sm:p-4 mb-6 shadow-sm">
           <div className="grid grid-cols-2 sm:flex sm:gap-4 sm:flex-wrap sm:items-end gap-3">
@@ -323,7 +363,7 @@ export default function TimetablePage() {
               <select value={selectedBatch} onChange={(e) => setSelectedBatch(e.target.value)}
                 className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 sm:min-w-[180px] ${selectedBatch ? "border-blue-400 bg-blue-50 text-blue-800 font-medium" : "border-slate-300"}`}>
                 <option value="">All Batches</option>
-                {batches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                {scopedBatches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
             <div>
@@ -331,7 +371,7 @@ export default function TimetablePage() {
               <select value={selectedTeacher} onChange={(e) => setSelectedTeacher(e.target.value)}
                 className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 sm:min-w-[180px] ${selectedTeacher ? "border-blue-400 bg-blue-50 text-blue-800 font-medium" : "border-slate-300"}`}>
                 <option value="">All Teachers</option>
-                {teachers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                {scopedTeachers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
 
@@ -560,7 +600,13 @@ export default function TimetablePage() {
 
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-5">
                 <p className="text-xs text-amber-700">
-                  <strong>Note:</strong> This will replace the existing timetable for the selected week. Zero conflicts guaranteed.
+                  {selectedScope === "senior" ? (
+                    <><strong>Generating Senior (11th-12th) timetable only.</strong> Junior classes will not be affected.</>
+                  ) : selectedScope === "junior" ? (
+                    <><strong>Generating Junior (8th-10th) timetable only.</strong> Senior classes will not be affected.</>
+                  ) : (
+                    <><strong>Note:</strong> This will replace the entire timetable for the selected week. Zero conflicts guaranteed.</>
+                  )}
                 </p>
               </div>
 

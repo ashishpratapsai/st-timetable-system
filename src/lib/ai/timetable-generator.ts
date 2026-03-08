@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from "@/lib/db";
+import { BatchType } from "@prisma/client";
 
 // ─── Types ───
 
@@ -212,8 +213,7 @@ function buildDayPlanningPrompt(
   // Build teacher workload summary
   const workloadLines: string[] = [];
   for (const [tid, total] of Object.entries(teacherTotalSlots)) {
-    const isSenior = assignments.find((a) => a.teacherId === tid && isSeniorBatchType(a.batchType));
-    const maxPerDay = isSenior ? 4 : 3; // 4 morning slots or 3 evening slots
+    const maxPerDay = 7; // all slots available for any batch type
     const minDays = Math.ceil(total / maxPerDay);
     workloadLines.push(
       `  ${teacherNameMap[tid]}: ${total} total slots, max ${maxPerDay}/day → needs at least ${minDays} days`
@@ -241,10 +241,10 @@ CRITICAL RULES:
 1. Return days for each assignment — the algorithm will figure out how many consecutive slots to book per day.
 2. An assignment with N slots/wk needs FEWER days than N (because of consecutive blocks). Use ceil(slots / blockSize) days.
 3. Only pick from the teacher's available days.
-4. Senior batches (IIT-JEE, NEET, JEE Mains) use morning slots — max 4 per day.
-5. Junior batches (8th, 9th, 10th) use evening slots — max 3 per day.
-6. IMPORTANT: Count total slots each teacher has across ALL assignments on each day. Don't overload any day.
-7. Balance teacher workload across the week — use the "needs at least N days" hint above.
+4. All time slots (morning and evening) are available for ALL batch types — no time restriction.
+5. IMPORTANT: Count total slots each teacher has across ALL assignments on each day. Don't overload any day.
+6. Balance teacher workload across the week — use the "needs at least N days" hint above.
+7. A teacher may teach both junior and senior batches — avoid scheduling them at the same time.
 ${customPrompt ? `\nADDITIONAL INSTRUCTIONS FROM ADMIN:\n${customPrompt}\n` : ""}
 Return ONLY a JSON array. Each element: {"a": <assignment_index>, "d": [<day_numbers>]}
 Example: [{"a":0,"d":[0,2]},{"a":1,"d":[1,3]}]
@@ -419,15 +419,22 @@ function scheduleFromAIPlan(
   leaveDayMap: Record<string, number[]>,
   classroomBlockSet: Set<string>, // "classroomId-day-startTime"
   consecutiveSlotsPref: number, // 2 or 3 (from user preference), 0 = auto
+  otherScopeEntries: { teacherId: string; classroomId: string; dayOfWeek: number; startTime: string }[] = [],
 ): { entries: GeneratedEntry[]; unscheduled: UnscheduledItem[] } {
   // Booking trackers — key format: "day-startTime"
   const teacherBooked = new Map<string, Set<string>>();
   const classroomBooked = new Map<string, Set<string>>();
   const batchBooked = new Map<string, Set<string>>();
 
-  // Split slots by batch type
-  const morningSlots = timeSlots.filter((s) => s.order <= 4).sort((a, b) => a.order - b.order);
-  const eveningSlots = timeSlots.filter((s) => s.order >= 5).sort((a, b) => a.order - b.order);
+  // Pre-populate booking maps with other-scope entries to avoid shared teacher/classroom conflicts
+  for (const e of otherScopeEntries) {
+    const timeKey = `${e.dayOfWeek}-${e.startTime}`;
+    addToMap(teacherBooked, e.teacherId, timeKey);
+    addToMap(classroomBooked, e.classroomId, timeKey);
+  }
+
+  // All slots available for all batch types (no morning/evening restriction)
+  const allSlots = [...timeSlots].sort((a, b) => a.order - b.order);
 
   const entries: GeneratedEntry[] = [];
   const unscheduled: UnscheduledItem[] = [];
@@ -457,7 +464,7 @@ function scheduleFromAIPlan(
   });
 
   for (const { assignment, days } of workGroups) {
-    const validSlots = isSeniorBatchType(assignment.batchType) ? morningSlots : eveningSlots;
+    const validSlots = allSlots;
     let remainingSlots = assignment.slotsPerWeek;
 
     // Determine block size for this assignment
@@ -562,7 +569,7 @@ function scheduleFromAIPlan(
         batchName: assignment.batchName,
         subjectName: assignment.subjectName,
         day: days[0] ?? 0,
-        reason: `No available slot on any day — all ${isSeniorBatchType(assignment.batchType) ? "morning" : "evening"} slots full`,
+        reason: `No available slot on any day — all slots full`,
       });
     }
   }
@@ -581,9 +588,7 @@ function getValidSlotCount(
   const { assignment, day } = item;
   if (leaveDayMap[assignment.teacherId]?.includes(day)) return 0;
 
-  const validSlots = isSeniorBatchType(assignment.batchType)
-    ? timeSlots.filter((s) => s.order <= 4)
-    : timeSlots.filter((s) => s.order >= 5);
+  const validSlots = timeSlots;
 
   let count = 0;
   for (const slot of validSlots) {
@@ -601,7 +606,8 @@ function getValidSlotCount(
 
 export async function generateTimetable(
   centerId: string | null,
-  weekStart: Date
+  weekStart: Date,
+  scope: "senior" | "junior" | "all" = "all"
 ): Promise<GenerationResult> {
   const { provider, apiKey } = await getAIProvider();
 
@@ -622,6 +628,11 @@ export async function generateTimetable(
         where: {
           status: "ACTIVE",
           ...(centerId ? { centerId } : {}),
+          ...(scope === "senior"
+            ? { batchType: { in: [BatchType.IIT_JEE, BatchType.JEE_MAINS, BatchType.NEET] } }
+            : scope === "junior"
+              ? { batchType: { notIn: [BatchType.IIT_JEE, BatchType.JEE_MAINS, BatchType.NEET] } }
+              : {}),
         },
         include: {
           center: { select: { id: true, name: true } },
@@ -667,11 +678,12 @@ export async function generateTimetable(
   const relevantAssignments = teachingAssignments.filter((a) => batchIds.has(a.batchId));
 
   if (relevantAssignments.length === 0) {
+    const scopeLabel = scope === "senior" ? "senior (11th-12th)" : scope === "junior" ? "junior (8th-10th)" : "";
     return {
       entries: [],
       unscheduled: [],
       conflicts: [],
-      message: "No teaching assignments found for the selected center and week.",
+      message: `No teaching assignments found for the selected center and week${scopeLabel ? ` (${scopeLabel} scope)` : ""}.`,
     };
   }
 
@@ -745,7 +757,7 @@ export async function generateTimetable(
   const consecutiveSlotsPref = consecutiveSlotsValue === "custom" ? 0 : parseInt(consecutiveSlotsValue) || 2;
 
   // ─── Phase 1: AI Day Planning ───
-  console.log(`[Timetable] Phase 1: AI day planning for ${processedAssignments.length} assignments`);
+  console.log(`[Timetable] Phase 1: AI day planning for ${processedAssignments.length} assignments (scope: ${scope})`);
 
   const prompt = buildDayPlanningPrompt(processedAssignments, availabilityMap, leaveDayMap, customPrompt);
 
@@ -790,7 +802,7 @@ export async function generateTimetable(
   }
 
   // ─── Phase 2: Deterministic Scheduling ───
-  console.log(`[Timetable] Phase 2: Deterministic slot/room assignment`);
+  console.log(`[Timetable] Phase 2: Deterministic slot/room assignment (scope: ${scope})`);
 
   const slotData = timeSlots.map((s) => ({
     id: s.id,
@@ -806,6 +818,24 @@ export async function generateTimetable(
     capacity: c.capacity,
   }));
 
+  // Fetch existing entries from the OTHER scope to avoid shared teacher/classroom conflicts
+  let otherScopeEntries: { teacherId: string; classroomId: string; dayOfWeek: number; startTime: string }[] = [];
+  if (scope !== "all") {
+    const SENIOR_TYPES: BatchType[] = [BatchType.IIT_JEE, BatchType.JEE_MAINS, BatchType.NEET];
+    otherScopeEntries = await prisma.timetableEntry.findMany({
+      where: {
+        weekStart,
+        batch: {
+          batchType: scope === "senior"
+            ? { notIn: SENIOR_TYPES }
+            : { in: SENIOR_TYPES },
+        },
+      },
+      select: { teacherId: true, classroomId: true, dayOfWeek: true, startTime: true },
+    });
+    console.log(`[Timetable] Found ${otherScopeEntries.length} entries from other scope to protect`);
+  }
+
   const { entries, unscheduled } = scheduleFromAIPlan(
     aiPlan,
     processedAssignments,
@@ -815,17 +845,19 @@ export async function generateTimetable(
     leaveDayMap,
     classroomBlockSet,
     consecutiveSlotsPref,
+    otherScopeEntries,
   );
 
   // ─── Phase 3: Report results ───
   const totalNeeded = processedAssignments.reduce((sum, a) => sum + a.slotsPerWeek, 0);
   const scheduled = entries.length;
 
+  const scopeTag = scope === "senior" ? " (Senior)" : scope === "junior" ? " (Junior)" : "";
   let message: string;
   if (unscheduled.length === 0) {
-    message = `✅ Successfully scheduled all ${scheduled} entries with zero conflicts.`;
+    message = `✅ Successfully scheduled all ${scheduled}${scopeTag} entries with zero conflicts.`;
   } else {
-    message = `Scheduled ${scheduled}/${totalNeeded} entries. ${unscheduled.length} could not be scheduled.`;
+    message = `Scheduled ${scheduled}/${totalNeeded}${scopeTag} entries. ${unscheduled.length} could not be scheduled.`;
   }
 
   console.log(`[Timetable] Result: ${scheduled} scheduled, ${unscheduled.length} unscheduled`);

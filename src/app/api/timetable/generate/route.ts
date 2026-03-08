@@ -7,12 +7,13 @@ export async function POST(req: NextRequest) {
   if (error) return error;
 
   const body = await req.json();
-  const { centerId, weekStart } = body;
+  const { centerId, weekStart, scope } = body;
 
   try {
     const result = await generateTimetable(
       centerId || null,
-      new Date(weekStart)
+      new Date(weekStart),
+      (scope as "senior" | "junior" | "all") || "all"
     );
 
     return NextResponse.json(result);

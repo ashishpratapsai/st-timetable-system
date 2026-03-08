@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/utils";
+import { BatchType } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
   const { error, session } = await requireAdmin();
   if (error) return error;
 
   const body = await req.json();
-  const { entries, weekStart } = body;
+  const { entries, weekStart, scope } = body;
+  const scopeValue = (scope as "senior" | "junior" | "all") || "all";
 
+  const SENIOR_BATCH_TYPES: BatchType[] = [BatchType.IIT_JEE, BatchType.JEE_MAINS, BatchType.NEET];
   const weekDate = new Date(weekStart);
 
   // ─── Server-side conflict validation (safety net) ───
@@ -41,10 +44,45 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Delete existing entries for this week
-  await prisma.timetableEntry.deleteMany({
-    where: { weekStart: weekDate },
-  });
+  // Delete existing entries for this week — scoped to avoid wiping the other scope
+  if (scopeValue === "senior") {
+    await prisma.timetableEntry.deleteMany({
+      where: { weekStart: weekDate, batch: { batchType: { in: SENIOR_BATCH_TYPES } } },
+    });
+  } else if (scopeValue === "junior") {
+    await prisma.timetableEntry.deleteMany({
+      where: { weekStart: weekDate, batch: { batchType: { notIn: SENIOR_BATCH_TYPES } } },
+    });
+  } else {
+    await prisma.timetableEntry.deleteMany({
+      where: { weekStart: weekDate },
+    });
+  }
+
+  // Validate new entries don't conflict with retained entries from the other scope
+  if (scopeValue !== "all") {
+    const retainedEntries = await prisma.timetableEntry.findMany({
+      where: { weekStart: weekDate },
+      select: { teacherId: true, classroomId: true, dayOfWeek: true, startTime: true },
+    });
+
+    for (const retained of retainedEntries) {
+      const timeKey = `${retained.dayOfWeek}-${retained.startTime}`;
+      if (teacherSlots.has(retained.teacherId) && teacherSlots.get(retained.teacherId)!.has(timeKey)) {
+        conflicts.push(`Teacher ${retained.teacherId} conflicts with existing ${scopeValue === "senior" ? "junior" : "senior"} entry at day ${retained.dayOfWeek}, ${retained.startTime}`);
+      }
+      if (classroomSlots.has(retained.classroomId) && classroomSlots.get(retained.classroomId)!.has(timeKey)) {
+        conflicts.push(`Classroom ${retained.classroomId} conflicts with existing entry at day ${retained.dayOfWeek}, ${retained.startTime}`);
+      }
+    }
+
+    if (conflicts.length > 0) {
+      return NextResponse.json(
+        { error: `Cannot save: ${conflicts.length} conflicts with existing ${scopeValue === "senior" ? "junior" : "senior"} timetable`, conflicts },
+        { status: 409 }
+      );
+    }
+  }
 
   // Create new entries
   const created = await prisma.timetableEntry.createMany({

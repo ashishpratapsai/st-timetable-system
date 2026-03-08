@@ -294,29 +294,29 @@ export default function ManualTimetablePage() {
   return (
     <div>
       <Header title="Manual Timetable Editor" />
-      <div className="p-4 animate-fadeIn">
+      <div className="p-3 sm:p-4 md:p-6 animate-fadeIn">
         {/* Top bar */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
           <div>
-            <h1 className="text-xl font-bold text-slate-900">Manual Timetable Editor</h1>
-            <p className="text-xs text-slate-500">Drag assignments from the sidebar and drop them into time slots</p>
+            <h1 className="text-lg sm:text-xl font-bold text-slate-900">Manual Timetable Editor</h1>
+            <p className="text-[11px] sm:text-xs text-slate-500">Drag assignments from the sidebar and drop them into time slots</p>
           </div>
-          <a href="/timetable" className="text-sm text-blue-600 hover:underline">
+          <a href="/timetable" className="text-sm text-blue-600 hover:underline whitespace-nowrap">
             &larr; Back to Timetable View
           </a>
         </div>
 
         {/* Filters */}
-        <div className="flex gap-3 mb-4">
+        <div className="grid grid-cols-2 sm:flex sm:gap-3 gap-3 mb-4">
           <div>
             <label className="block text-xs text-slate-500 mb-1">Week</label>
             <input type="date" value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)}
-              className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200" />
+              className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200" />
           </div>
           <div>
             <label className="block text-xs text-slate-500 mb-1">Center</label>
             <select value={selectedCenter} onChange={(e) => { setSelectedCenter(e.target.value); setSelectedBatch(""); }}
-              className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200">
+              className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200">
               <option value="">All Centers</option>
               {centers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
@@ -324,7 +324,7 @@ export default function ManualTimetablePage() {
           <div>
             <label className="block text-xs text-slate-500 mb-1">Batch</label>
             <select value={selectedBatch || batchId} onChange={(e) => setSelectedBatch(e.target.value)}
-              className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200">
+              className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200">
               {filteredBatches.map((b) => <option key={b.id} value={b.id}>{b.name} ({b.center.name})</option>)}
             </select>
           </div>
@@ -349,11 +349,11 @@ export default function ManualTimetablePage() {
           </div>
         )}
 
-        <div className="flex gap-4">
+        <div className="flex flex-col lg:flex-row gap-4">
           {/* ─── Main Grid ─── */}
-          <div className="flex-1 overflow-auto">
-            <div className="bg-white rounded-2xl border border-slate-200/70 shadow-md overflow-auto">
-              <table className="w-full min-w-[800px]">
+          <div className="flex-1 -mx-3 sm:mx-0 overflow-auto">
+            <div className="bg-white sm:rounded-2xl border border-slate-200/70 shadow-md overflow-auto">
+              <table className="w-full min-w-[700px]">
                 <thead>
                   <tr className="bg-slate-50/80 border-b border-slate-200">
                     <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider sticky left-0 bg-slate-50/80 w-24">
@@ -429,8 +429,8 @@ export default function ManualTimetablePage() {
           </div>
 
           {/* ─── Sidebar: Assignment Cards ─── */}
-          <div className="w-72 flex-shrink-0">
-            <div className="bg-white rounded-2xl border border-slate-200/70 shadow-md p-3 sticky top-4 max-h-[calc(100vh-160px)] overflow-y-auto">
+          <div className="w-full lg:w-72 lg:flex-shrink-0 order-first lg:order-last">
+            <div className="bg-white rounded-2xl border border-slate-200/70 shadow-md p-3 lg:sticky lg:top-4 lg:max-h-[calc(100vh-160px)] overflow-y-auto">
               <h3 className="font-semibold text-slate-900 text-sm mb-3">Teaching Assignments</h3>
               <p className="text-[10px] text-slate-400 mb-3">Drag cards to the grid to schedule</p>
 
