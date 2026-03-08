@@ -148,7 +148,7 @@ export default function AvailabilityPage({ params }: { params: Promise<{ id: str
   return (
     <div>
       <Header title={`Availability - ${teacher?.user?.name || "Teacher"}`} />
-      <div className="p-6 animate-fadeIn">
+      <div className="p-3 sm:p-4 md:p-6 animate-fadeIn">
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">

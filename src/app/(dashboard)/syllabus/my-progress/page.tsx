@@ -112,7 +112,7 @@ export default function MyProgressPage() {
   return (
     <div>
       <Header title="My Syllabus" />
-      <div className="p-6 animate-fadeIn">
+      <div className="p-3 sm:p-4 md:p-6 animate-fadeIn">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">My Syllabus Progress</h1>
           <p className="text-slate-500 text-sm mt-1">Track your assigned chapters and mark subtopics as completed</p>

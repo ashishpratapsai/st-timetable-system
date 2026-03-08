@@ -114,7 +114,7 @@ export default function BatchesPage() {
   return (
     <div>
       <Header title="Batches" />
-      <div className="p-6 animate-fadeIn">
+      <div className="p-3 sm:p-4 md:p-6 animate-fadeIn">
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Batches</h1>

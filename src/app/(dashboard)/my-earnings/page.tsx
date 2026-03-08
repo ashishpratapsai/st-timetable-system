@@ -109,7 +109,7 @@ export default function MyEarningsPage() {
   return (
     <div>
       <Header title="My Earnings" />
-      <div className="p-6 animate-fadeIn">
+      <div className="p-3 sm:p-4 md:p-6 animate-fadeIn">
         <h1 className="text-2xl font-bold gradient-text mb-6">My Earnings</h1>
 
         {/* Date Filters */}

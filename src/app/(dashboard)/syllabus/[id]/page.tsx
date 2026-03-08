@@ -332,7 +332,7 @@ export default function SyllabusDetailPage({ params }: { params: Promise<{ id: s
   return (
     <div>
       <Header title="Syllabus" />
-      <div className="p-6 animate-fadeIn">
+      <div className="p-3 sm:p-4 md:p-6 animate-fadeIn">
         {/* Header */}
         <div className="flex justify-between items-start mb-6">
           <div>

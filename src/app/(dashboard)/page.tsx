@@ -29,7 +29,7 @@ export default function DashboardPage() {
   return (
     <div>
       <Header title="Dashboard" />
-      <div className="p-6 animate-fadeIn">
+      <div className="p-3 sm:p-4 md:p-6 animate-fadeIn">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             Welcome back, {session?.user?.name}!

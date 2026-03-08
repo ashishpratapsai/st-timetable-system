@@ -11,6 +11,36 @@ export async function POST(req: NextRequest) {
 
   const weekDate = new Date(weekStart);
 
+  // ─── Server-side conflict validation (safety net) ───
+  const teacherSlots = new Map<string, Set<string>>();
+  const classroomSlots = new Map<string, Set<string>>();
+  const conflicts: string[] = [];
+
+  for (const e of entries) {
+    const timeKey = `${e.dayOfWeek}-${e.startTime}`;
+
+    // Check teacher double-booking
+    if (!teacherSlots.has(e.teacherId)) teacherSlots.set(e.teacherId, new Set());
+    if (teacherSlots.get(e.teacherId)!.has(timeKey)) {
+      conflicts.push(`Teacher ${e.teacherId} double-booked at day ${e.dayOfWeek}, ${e.startTime}`);
+    }
+    teacherSlots.get(e.teacherId)!.add(timeKey);
+
+    // Check classroom double-booking
+    if (!classroomSlots.has(e.classroomId)) classroomSlots.set(e.classroomId, new Set());
+    if (classroomSlots.get(e.classroomId)!.has(timeKey)) {
+      conflicts.push(`Classroom ${e.classroomId} double-booked at day ${e.dayOfWeek}, ${e.startTime}`);
+    }
+    classroomSlots.get(e.classroomId)!.add(timeKey);
+  }
+
+  if (conflicts.length > 0) {
+    return NextResponse.json(
+      { error: `Cannot save: ${conflicts.length} conflicts detected`, conflicts },
+      { status: 409 }
+    );
+  }
+
   // Delete existing entries for this week
   await prisma.timetableEntry.deleteMany({
     where: { weekStart: weekDate },

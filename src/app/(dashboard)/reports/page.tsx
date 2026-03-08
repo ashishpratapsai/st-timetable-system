@@ -27,7 +27,7 @@ export default function ReportsPage() {
   return (
     <div>
       <Header title="Reports" />
-      <div className="p-6 animate-fadeIn">
+      <div className="p-3 sm:p-4 md:p-6 animate-fadeIn">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight mb-6">Reports & Analytics</h1>
 
         {/* Faculty Utilization */}

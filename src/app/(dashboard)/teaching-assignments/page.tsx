@@ -154,7 +154,7 @@ export default function TeachingAssignmentsPage() {
   return (
     <div>
       <Header title="Teaching Assignments" />
-      <div className="p-6 animate-fadeIn">
+      <div className="p-3 sm:p-4 md:p-6 animate-fadeIn">
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Teaching Assignments</h1>

@@ -2,6 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from "@/lib/db";
 
+// ─── Types ───
+
 interface GeneratedEntry {
   batchId: string;
   subjectId: string;
@@ -12,11 +14,49 @@ interface GeneratedEntry {
   endTime: string;
 }
 
+interface AIPlanEntry {
+  a: number; // assignment index
+  d: number[]; // day numbers (0=Mon ... 5=Sat)
+}
+
+interface UnscheduledItem {
+  teacherName: string;
+  batchName: string;
+  subjectName: string;
+  day: number;
+  reason: string;
+}
+
+interface ProcessedAssignment {
+  index: number;
+  teacherId: string;
+  teacherName: string;
+  batchId: string;
+  batchName: string;
+  batchType: string;
+  centerId: string;
+  centerName: string;
+  subjectId: string;
+  subjectName: string;
+  subjectCode: string;
+  slotsPerWeek: number;
+  batchStrength: number;
+  employmentType: string;
+}
+
 interface GenerationResult {
   entries: GeneratedEntry[];
-  conflicts: string[];
+  unscheduled: UnscheduledItem[];
+  conflicts: string[]; // kept for backward compatibility
   message: string;
 }
+
+// ─── Constants ───
+
+const SENIOR_BATCH_TYPES = new Set(["IIT_JEE", "JEE_MAINS", "NEET"]);
+const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+// ─── AI Provider ───
 
 async function getAIProvider(): Promise<{
   provider: "claude" | "gemini";
@@ -41,11 +81,13 @@ async function getAIProvider(): Promise<{
   return { provider, apiKey: keySetting.value };
 }
 
+// ─── AI Calls (kept from original) ───
+
 async function callClaude(prompt: string, apiKey: string): Promise<string> {
   const client = new Anthropic({ apiKey });
   const response = await client.messages.create({
     model: "claude-sonnet-4-20250514",
-    max_tokens: 16000,
+    max_tokens: 8000,
     messages: [
       { role: "user", content: prompt },
       { role: "assistant", content: "[" },
@@ -62,7 +104,7 @@ async function callGemini(prompt: string, apiKey: string): Promise<string> {
     model: "gemini-2.0-flash",
     generationConfig: {
       responseMimeType: "application/json",
-      maxOutputTokens: 16384,
+      maxOutputTokens: 8192,
     },
   });
 
@@ -70,7 +112,9 @@ async function callGemini(prompt: string, apiKey: string): Promise<string> {
   return result.response.text();
 }
 
-function parseJSON(text: string): GeneratedEntry[] {
+// ─── JSON Parsing ───
+
+function parseJSON<T>(text: string): T[] {
   try {
     const parsed = JSON.parse(text);
     return Array.isArray(parsed) ? parsed : [];
@@ -102,51 +146,458 @@ function parseJSON(text: string): GeneratedEntry[] {
   throw new Error("Failed to parse AI response as JSON");
 }
 
-/**
- * Build prompt for a SINGLE center's batches.
- * Keeps prompt small so output stays within token limits.
- */
-function buildPromptForCenter(
-  centerBatches: { id: string; name: string; center: string; strength: number; subjects: { id: string; hpw: number }[] }[],
-  centerClassrooms: { id: string; name: string; cap: number }[],
-  relevantTeachers: { id: string; name: string; type: string; subjects: string[]; unavailable: string[] }[],
-  centerAssignments: { t: string; b: string; s: string; slots: number }[],
-  slotData: { start: string; end: string }[],
-  subjectList: string,
-  classroomRestrictions: { room: string; day: number; start: string }[],
-  teacherLeaveData: { teacher: string; days: number[] }[],
+// ─── Helpers ───
+
+function isSeniorBatchType(batchType: string): boolean {
+  return SENIOR_BATCH_TYPES.has(batchType);
+}
+
+function addToMap(map: Map<string, Set<string>>, key: string, value: string) {
+  if (!map.has(key)) map.set(key, new Set());
+  map.get(key)!.add(value);
+}
+
+// ─── Phase 1: Build Simplified AI Prompt ───
+
+function buildDayPlanningPrompt(
+  assignments: ProcessedAssignment[],
+  availabilityMap: Record<string, Record<string, boolean>>,
+  leaveDayMap: Record<string, number[]>,
   customPrompt: string,
 ): string {
-  const centerRestrictions = classroomRestrictions.filter((r) =>
-    centerClassrooms.some((c) => c.id === r.room)
-  );
-  const relevantTeacherIds = new Set(relevantTeachers.map((t) => t.id));
-  const centerLeaves = teacherLeaveData.filter((l) => relevantTeacherIds.has(l.teacher));
+  // For each teacher, figure out which days they are available
+  const teacherDays: Record<string, Set<number>> = {};
+  for (const a of assignments) {
+    if (teacherDays[a.teacherId]) continue;
+    const days = new Set<number>();
+    for (let d = 0; d < 6; d++) {
+      // Check if teacher is available on at least one slot this day
+      const dayKey = `${d}`;
+      const avail = availabilityMap[a.teacherId] || {};
+      let hasSlot = false;
+      for (const key of Object.keys(avail)) {
+        if (key.startsWith(dayKey + "-") && avail[key]) {
+          hasSlot = true;
+          break;
+        }
+      }
+      // Also check leave
+      if (leaveDayMap[a.teacherId]?.includes(d)) continue;
+      if (hasSlot) days.add(d);
+    }
+    teacherDays[a.teacherId] = days;
+  }
 
-  return `Generate a weekly timetable. Output ONLY a JSON array.
+  // Build human-readable assignment list
+  const lines: string[] = [];
+  for (const a of assignments) {
+    const availDays = Array.from(teacherDays[a.teacherId] || [])
+      .sort()
+      .map((d) => DAY_NAMES[d])
+      .join(",");
+    const typeTag = a.employmentType === "PART_TIME" ? " [Part-Time]" : "";
+    lines.push(
+      `${a.index}. ${a.teacherName}${typeTag} → ${a.batchName} → ${a.subjectName} (${a.slotsPerWeek} slots/wk, available: ${availDays})`
+    );
+  }
 
-SUBJECTS: ${subjectList}
-TEACHERS: ${JSON.stringify(relevantTeachers)}
-BATCHES: ${JSON.stringify(centerBatches)}
-CLASSROOMS: ${JSON.stringify(centerClassrooms)}
-SLOTS: ${JSON.stringify(slotData)}
-${centerAssignments.length > 0 ? `ASSIGNMENTS (t=teacher,b=batch,s=subject,slots=perWeek): ${JSON.stringify(centerAssignments)}` : ""}
-${centerRestrictions.length > 0 ? `BLOCKED: ${JSON.stringify(centerRestrictions)}` : ""}
-${centerLeaves.length > 0 ? `LEAVES: ${JSON.stringify(centerLeaves)}` : ""}
+  // Count total slots per teacher to help AI understand workload
+  const teacherTotalSlots: Record<string, number> = {};
+  const teacherNameMap: Record<string, string> = {};
+  for (const a of assignments) {
+    teacherTotalSlots[a.teacherId] = (teacherTotalSlots[a.teacherId] || 0) + a.slotsPerWeek;
+    teacherNameMap[a.teacherId] = a.teacherName;
+  }
 
-DAYS: Mon=0,Tue=1,Wed=2,Thu=3,Fri=4,Sat=5
+  // Build teacher workload summary
+  const workloadLines: string[] = [];
+  for (const [tid, total] of Object.entries(teacherTotalSlots)) {
+    const isSenior = assignments.find((a) => a.teacherId === tid && isSeniorBatchType(a.batchType));
+    const maxPerDay = isSenior ? 4 : 3; // 4 morning slots or 3 evening slots
+    const minDays = Math.ceil(total / maxPerDay);
+    workloadLines.push(
+      `  ${teacherNameMap[tid]}: ${total} total slots, max ${maxPerDay}/day → needs at least ${minDays} days`
+    );
+  }
 
-RULES:
-- No teacher/classroom/batch double-booking at same day+time
-- Teacher must teach subjects they're qualified for
-- Assignments dictate teacher-batch-subject pairing and slots needed
-- Classroom capacity >= batch strength
-- Spread subjects across the week, balance teacher workload
-${customPrompt ? `\nCUSTOM INSTRUCTIONS FROM ADMIN:\n${customPrompt}` : ""}
+  return `You are a school timetable DAY PLANNER. Your ONLY job is to decide which DAYS each teaching assignment should happen.
 
-Each element: {"batchId":"...","subjectId":"...","teacherId":"...","classroomId":"...","dayOfWeek":0,"startTime":"09:00","endTime":"10:00"}
-ONLY the JSON array. No text, no markdown.`;
+ASSIGNMENTS (index. Teacher → Batch → Subject (slots needed, available days)):
+${lines.join("\n")}
+
+TEACHER WORKLOAD SUMMARY (spread classes across enough days!):
+${workloadLines.join("\n")}
+
+DAYS: Mon=0, Tue=1, Wed=2, Thu=3, Fri=4, Sat=5
+
+SCHEDULING MODEL:
+- Classes are scheduled in CONSECUTIVE BLOCKS (2-3 slots back-to-back per day for each teacher-batch).
+- So an assignment with 4 slots/wk might need only 2 days (2 consecutive slots each day).
+- An assignment with 3 slots/wk could be 1 day with 3 consecutive slots, or 1 day with 2 + another with 1.
+- FEWER UNIQUE DAYS is often better — group slots into blocks.
+- The "d" array should list each day ONCE, even if multiple consecutive slots will be scheduled on that day.
+
+CRITICAL RULES:
+1. Return days for each assignment — the algorithm will figure out how many consecutive slots to book per day.
+2. An assignment with N slots/wk needs FEWER days than N (because of consecutive blocks). Use ceil(slots / blockSize) days.
+3. Only pick from the teacher's available days.
+4. Senior batches (IIT-JEE, NEET, JEE Mains) use morning slots — max 4 per day.
+5. Junior batches (8th, 9th, 10th) use evening slots — max 3 per day.
+6. IMPORTANT: Count total slots each teacher has across ALL assignments on each day. Don't overload any day.
+7. Balance teacher workload across the week — use the "needs at least N days" hint above.
+${customPrompt ? `\nADDITIONAL INSTRUCTIONS FROM ADMIN:\n${customPrompt}\n` : ""}
+Return ONLY a JSON array. Each element: {"a": <assignment_index>, "d": [<day_numbers>]}
+Example: [{"a":0,"d":[0,2]},{"a":1,"d":[1,3]}]
+
+ONLY the JSON array. No text, no markdown, no explanation.`;
 }
+
+// ─── Phase 2: Deterministic Scheduler ───
+
+function tryScheduleEntry(
+  assignment: ProcessedAssignment,
+  day: number,
+  validSlots: { id: string; startTime: string; endTime: string; order: number }[],
+  classrooms: { id: string; name: string; centerId: string; capacity: number }[],
+  availabilityMap: Record<string, Record<string, boolean>>,
+  leaveDayMap: Record<string, number[]>,
+  classroomBlockSet: Set<string>,
+  teacherBooked: Map<string, Set<string>>,
+  classroomBooked: Map<string, Set<string>>,
+  batchBooked: Map<string, Set<string>>,
+): { entry: GeneratedEntry; reason: null } | { entry: null; reason: string } {
+  // Teacher on leave this entire day — no point checking slots
+  if (leaveDayMap[assignment.teacherId]?.includes(day)) {
+    return { entry: null, reason: `Teacher on leave ${DAY_NAMES[day]}` };
+  }
+
+  let lastReason = "No valid time slot found";
+
+  for (const slot of validSlots) {
+    const timeKey = `${day}-${slot.startTime}`;
+
+    // Check 1: Teacher not already booked at this time
+    if (teacherBooked.get(assignment.teacherId)?.has(timeKey)) {
+      lastReason = `Teacher already booked at ${DAY_NAMES[day]} ${slot.startTime}`;
+      continue;
+    }
+
+    // Check 2: Teacher is available per availability grid
+    const avail = availabilityMap[assignment.teacherId];
+    if (avail && avail[timeKey] === false) {
+      lastReason = `Teacher not available ${DAY_NAMES[day]} ${slot.startTime}`;
+      continue;
+    }
+
+    // Check 3: Batch not already booked at this time
+    if (batchBooked.get(assignment.batchId)?.has(timeKey)) {
+      lastReason = `Batch already has class at ${DAY_NAMES[day]} ${slot.startTime}`;
+      continue;
+    }
+
+    // Check 4: Find free classroom at correct center with enough capacity
+    const centerClassrooms = classrooms
+      .filter((c) => c.centerId === assignment.centerId && c.capacity >= assignment.batchStrength)
+      .sort((a, b) => a.capacity - b.capacity); // prefer tightest fit
+
+    let foundClassroom: typeof classrooms[0] | null = null;
+    for (const room of centerClassrooms) {
+      const roomKey = `${room.id}-${day}-${slot.startTime}`;
+      if (classroomBooked.get(room.id)?.has(timeKey)) continue;
+      if (classroomBlockSet.has(roomKey)) continue;
+      foundClassroom = room;
+      break;
+    }
+
+    if (!foundClassroom) {
+      lastReason = `No classroom available at ${assignment.centerName} for ${DAY_NAMES[day]} ${slot.startTime}`;
+      continue;
+    }
+
+    // ✅ All checks passed
+    const entry: GeneratedEntry = {
+      batchId: assignment.batchId,
+      subjectId: assignment.subjectId,
+      teacherId: assignment.teacherId,
+      classroomId: foundClassroom.id,
+      dayOfWeek: day,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+    };
+
+    return { entry, reason: null };
+  }
+
+  return { entry: null, reason: lastReason };
+}
+
+function tryScheduleConsecutiveBlock(
+  assignment: ProcessedAssignment,
+  day: number,
+  blockSize: number,
+  validSlots: { id: string; startTime: string; endTime: string; order: number }[],
+  classrooms: { id: string; name: string; centerId: string; capacity: number }[],
+  availabilityMap: Record<string, Record<string, boolean>>,
+  leaveDayMap: Record<string, number[]>,
+  classroomBlockSet: Set<string>,
+  teacherBooked: Map<string, Set<string>>,
+  classroomBooked: Map<string, Set<string>>,
+  batchBooked: Map<string, Set<string>>,
+): { entries: GeneratedEntry[]; scheduled: number } {
+  // Teacher on leave this day
+  if (leaveDayMap[assignment.teacherId]?.includes(day)) {
+    return { entries: [], scheduled: 0 };
+  }
+
+  // Try to find `blockSize` consecutive slots starting from each position
+  for (let startIdx = 0; startIdx <= validSlots.length - blockSize; startIdx++) {
+    const block = validSlots.slice(startIdx, startIdx + blockSize);
+
+    // Check all slots in the block are consecutive (orders differ by 1)
+    let isConsecutive = true;
+    for (let i = 1; i < block.length; i++) {
+      if (block[i].order !== block[i - 1].order + 1) {
+        isConsecutive = false;
+        break;
+      }
+    }
+    if (!isConsecutive) continue;
+
+    // Check all constraints for every slot in the block
+    let allClear = true;
+    let foundClassroom: typeof classrooms[0] | null = null;
+
+    for (const slot of block) {
+      const timeKey = `${day}-${slot.startTime}`;
+      if (teacherBooked.get(assignment.teacherId)?.has(timeKey)) { allClear = false; break; }
+      const avail = availabilityMap[assignment.teacherId];
+      if (avail && avail[timeKey] === false) { allClear = false; break; }
+      if (batchBooked.get(assignment.batchId)?.has(timeKey)) { allClear = false; break; }
+    }
+    if (!allClear) continue;
+
+    // Find a classroom available for ALL slots in the block
+    const centerClassrooms = classrooms
+      .filter((c) => c.centerId === assignment.centerId && c.capacity >= assignment.batchStrength)
+      .sort((a, b) => a.capacity - b.capacity);
+
+    for (const room of centerClassrooms) {
+      let roomFree = true;
+      for (const slot of block) {
+        const timeKey = `${day}-${slot.startTime}`;
+        const roomKey = `${room.id}-${day}-${slot.startTime}`;
+        if (classroomBooked.get(room.id)?.has(timeKey)) { roomFree = false; break; }
+        if (classroomBlockSet.has(roomKey)) { roomFree = false; break; }
+      }
+      if (roomFree) { foundClassroom = room; break; }
+    }
+    if (!foundClassroom) continue;
+
+    // All checks passed — book the entire block
+    const blockEntries: GeneratedEntry[] = block.map((slot) => ({
+      batchId: assignment.batchId,
+      subjectId: assignment.subjectId,
+      teacherId: assignment.teacherId,
+      classroomId: foundClassroom!.id,
+      dayOfWeek: day,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+    }));
+
+    return { entries: blockEntries, scheduled: blockSize };
+  }
+
+  return { entries: [], scheduled: 0 };
+}
+
+function scheduleFromAIPlan(
+  aiPlan: AIPlanEntry[],
+  assignments: ProcessedAssignment[],
+  timeSlots: { id: string; startTime: string; endTime: string; order: number }[],
+  classrooms: { id: string; name: string; centerId: string; capacity: number }[],
+  availabilityMap: Record<string, Record<string, boolean>>,
+  leaveDayMap: Record<string, number[]>,
+  classroomBlockSet: Set<string>, // "classroomId-day-startTime"
+  consecutiveSlotsPref: number, // 2 or 3 (from user preference), 0 = auto
+): { entries: GeneratedEntry[]; unscheduled: UnscheduledItem[] } {
+  // Booking trackers — key format: "day-startTime"
+  const teacherBooked = new Map<string, Set<string>>();
+  const classroomBooked = new Map<string, Set<string>>();
+  const batchBooked = new Map<string, Set<string>>();
+
+  // Split slots by batch type
+  const morningSlots = timeSlots.filter((s) => s.order <= 4).sort((a, b) => a.order - b.order);
+  const eveningSlots = timeSlots.filter((s) => s.order >= 5).sort((a, b) => a.order - b.order);
+
+  const entries: GeneratedEntry[] = [];
+  const unscheduled: UnscheduledItem[] = [];
+
+  // Build work items grouped by assignment: (assignment, days[])
+  interface WorkGroup {
+    assignment: ProcessedAssignment;
+    days: number[];
+  }
+  const workGroups: WorkGroup[] = [];
+
+  for (const plan of aiPlan) {
+    const assignment = assignments.find((a) => a.index === plan.a);
+    if (!assignment) continue;
+
+    const days = [...new Set(plan.d)].filter((d) => d >= 0 && d <= 5);
+    workGroups.push({ assignment, days });
+  }
+
+  // Sort by constraint tightness: most constrained first
+  workGroups.sort((a, b) => {
+    const aPart = a.assignment.employmentType === "PART_TIME" ? 0 : 1;
+    const bPart = b.assignment.employmentType === "PART_TIME" ? 0 : 1;
+    if (aPart !== bPart) return aPart - bPart;
+    // Fewer slotsPerWeek first (more constrained)
+    return a.assignment.slotsPerWeek - b.assignment.slotsPerWeek;
+  });
+
+  for (const { assignment, days } of workGroups) {
+    const validSlots = isSeniorBatchType(assignment.batchType) ? morningSlots : eveningSlots;
+    let remainingSlots = assignment.slotsPerWeek;
+
+    // Determine block size for this assignment
+    const maxBlockSize = consecutiveSlotsPref > 0 ? consecutiveSlotsPref : 2; // default to 2
+
+    // Phase A: Try to schedule consecutive blocks on AI's preferred days
+    for (const day of days) {
+      if (remainingSlots <= 0) break;
+
+      // Try the desired block size first, then smaller blocks, then single slots
+      const blockSize = Math.min(maxBlockSize, remainingSlots);
+
+      let scheduled = false;
+      // Try block sizes from largest to smallest
+      for (let trySize = blockSize; trySize >= 1; trySize--) {
+        const result = tryScheduleConsecutiveBlock(
+          assignment, day, trySize, validSlots, classrooms,
+          availabilityMap, leaveDayMap, classroomBlockSet,
+          teacherBooked, classroomBooked, batchBooked,
+        );
+
+        if (result.scheduled > 0) {
+          for (const e of result.entries) {
+            entries.push(e);
+            addToMap(teacherBooked, assignment.teacherId, `${day}-${e.startTime}`);
+            addToMap(classroomBooked, e.classroomId, `${day}-${e.startTime}`);
+            addToMap(batchBooked, assignment.batchId, `${day}-${e.startTime}`);
+          }
+          remainingSlots -= result.scheduled;
+          scheduled = true;
+          break;
+        }
+      }
+
+      if (!scheduled) {
+        // Try single slot as last resort on this day
+        const singleResult = tryScheduleEntry(
+          assignment, day, validSlots, classrooms,
+          availabilityMap, leaveDayMap, classroomBlockSet,
+          teacherBooked, classroomBooked, batchBooked,
+        );
+        if (singleResult.entry) {
+          entries.push(singleResult.entry);
+          addToMap(teacherBooked, assignment.teacherId, `${day}-${singleResult.entry.startTime}`);
+          addToMap(classroomBooked, singleResult.entry.classroomId, `${day}-${singleResult.entry.startTime}`);
+          addToMap(batchBooked, assignment.batchId, `${day}-${singleResult.entry.startTime}`);
+          remainingSlots -= 1;
+        }
+      }
+    }
+
+    // Phase B: Fallback — try all other days for remaining slots
+    if (remainingSlots > 0) {
+      const triedDays = new Set(days);
+      const fallbackDays = [0, 1, 2, 3, 4, 5].filter((d) => !triedDays.has(d));
+
+      for (const altDay of fallbackDays) {
+        if (remainingSlots <= 0) break;
+
+        const blockSize = Math.min(maxBlockSize, remainingSlots);
+        for (let trySize = blockSize; trySize >= 1; trySize--) {
+          const result = tryScheduleConsecutiveBlock(
+            assignment, altDay, trySize, validSlots, classrooms,
+            availabilityMap, leaveDayMap, classroomBlockSet,
+            teacherBooked, classroomBooked, batchBooked,
+          );
+
+          if (result.scheduled > 0) {
+            for (const e of result.entries) {
+              entries.push(e);
+              addToMap(teacherBooked, assignment.teacherId, `${altDay}-${e.startTime}`);
+              addToMap(classroomBooked, e.classroomId, `${altDay}-${e.startTime}`);
+              addToMap(batchBooked, assignment.batchId, `${altDay}-${e.startTime}`);
+            }
+            remainingSlots -= result.scheduled;
+            break;
+          }
+        }
+
+        // Single slot fallback
+        if (remainingSlots > 0) {
+          const singleResult = tryScheduleEntry(
+            assignment, altDay, validSlots, classrooms,
+            availabilityMap, leaveDayMap, classroomBlockSet,
+            teacherBooked, classroomBooked, batchBooked,
+          );
+          if (singleResult.entry) {
+            entries.push(singleResult.entry);
+            addToMap(teacherBooked, assignment.teacherId, `${altDay}-${singleResult.entry.startTime}`);
+            addToMap(classroomBooked, singleResult.entry.classroomId, `${altDay}-${singleResult.entry.startTime}`);
+            addToMap(batchBooked, assignment.batchId, `${altDay}-${singleResult.entry.startTime}`);
+            remainingSlots -= 1;
+          }
+        }
+      }
+    }
+
+    // Phase C: Report any remaining unscheduled slots
+    for (let i = 0; i < remainingSlots; i++) {
+      unscheduled.push({
+        teacherName: assignment.teacherName,
+        batchName: assignment.batchName,
+        subjectName: assignment.subjectName,
+        day: days[0] ?? 0,
+        reason: `No available slot on any day — all ${isSeniorBatchType(assignment.batchType) ? "morning" : "evening"} slots full`,
+      });
+    }
+  }
+
+  return { entries, unscheduled };
+}
+
+function getValidSlotCount(
+  item: { assignment: ProcessedAssignment; day: number },
+  timeSlots: { order: number; startTime: string }[],
+  availabilityMap: Record<string, Record<string, boolean>>,
+  leaveDayMap: Record<string, number[]>,
+  teacherBooked: Map<string, Set<string>>,
+  batchBooked: Map<string, Set<string>>,
+): number {
+  const { assignment, day } = item;
+  if (leaveDayMap[assignment.teacherId]?.includes(day)) return 0;
+
+  const validSlots = isSeniorBatchType(assignment.batchType)
+    ? timeSlots.filter((s) => s.order <= 4)
+    : timeSlots.filter((s) => s.order >= 5);
+
+  let count = 0;
+  for (const slot of validSlots) {
+    const timeKey = `${day}-${slot.startTime}`;
+    if (teacherBooked.get(assignment.teacherId)?.has(timeKey)) continue;
+    if (batchBooked.get(assignment.batchId)?.has(timeKey)) continue;
+    const avail = availabilityMap[assignment.teacherId];
+    if (avail && avail[timeKey] === false) continue;
+    count++;
+  }
+  return count;
+}
+
+// ─── Main Generation Function ───
 
 export async function generateTimetable(
   centerId: string | null,
@@ -157,246 +608,232 @@ export async function generateTimetable(
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 6);
 
-  const [teachers, batches, classrooms, timeSlots, teachingAssignments, classroomBlocks, approvedLeaves] = await Promise.all([
-    prisma.teacher.findMany({
-      include: {
-        user: { select: { name: true } },
-        subjects: { include: { subject: true } },
-        availability: true,
-      },
-    }),
-    prisma.batch.findMany({
-      where: {
-        status: "ACTIVE",
-        ...(centerId ? { centerId } : {}),
-      },
-      include: {
-        center: { select: { id: true, name: true } },
-        batchSubjects: { include: { subject: true } },
-      },
-    }),
-    prisma.classroom.findMany({
-      where: centerId ? { centerId } : {},
-      include: { center: { select: { id: true, name: true } } },
-    }),
-    prisma.timeSlot.findMany({ orderBy: { order: "asc" } }),
-    prisma.teachingAssignment.findMany({
-      where: {
-        startDate: { lte: weekStart },
-        endDate: { gte: weekStart },
-      },
-      include: {
-        teacher: { include: { user: { select: { name: true } } } },
-        batch: true,
-        subject: true,
-      },
-    }),
-    prisma.classroomAvailability.findMany({
-      where: {
-        date: { gte: weekStart, lte: weekEnd },
-        isAvailable: false,
-      },
-    }),
-    prisma.leave.findMany({
-      where: {
-        status: "APPROVED",
-        startDate: { lte: weekEnd },
-        endDate: { gte: weekStart },
-      },
-      include: {
-        teacher: { include: { user: { select: { name: true } } } },
-      },
-    }),
-  ]);
+  // Fetch all data (same Prisma queries as before)
+  const [teachers, batches, classrooms, timeSlots, teachingAssignments, classroomBlocks, approvedLeaves] =
+    await Promise.all([
+      prisma.teacher.findMany({
+        include: {
+          user: { select: { name: true } },
+          subjects: { include: { subject: true } },
+          availability: true,
+        },
+      }),
+      prisma.batch.findMany({
+        where: {
+          status: "ACTIVE",
+          ...(centerId ? { centerId } : {}),
+        },
+        include: {
+          center: { select: { id: true, name: true } },
+          batchSubjects: { include: { subject: true } },
+        },
+      }),
+      prisma.classroom.findMany({
+        where: centerId ? { centerId } : {},
+        include: { center: { select: { id: true, name: true } } },
+      }),
+      prisma.timeSlot.findMany({ orderBy: { order: "asc" } }),
+      prisma.teachingAssignment.findMany({
+        where: {
+          startDate: { lte: weekStart },
+          endDate: { gte: weekStart },
+        },
+        include: {
+          teacher: { include: { user: { select: { name: true } } } },
+          batch: { include: { center: { select: { id: true, name: true } } } },
+          subject: true,
+        },
+      }),
+      prisma.classroomAvailability.findMany({
+        where: {
+          date: { gte: weekStart, lte: weekEnd },
+          isAvailable: false,
+        },
+      }),
+      prisma.leave.findMany({
+        where: {
+          status: "APPROVED",
+          startDate: { lte: weekEnd },
+          endDate: { gte: weekStart },
+        },
+        include: {
+          teacher: { include: { user: { select: { name: true } } } },
+        },
+      }),
+    ]);
 
-  // Preprocess compact data
-  const subjectLookup: Record<string, string> = {};
+  // Filter assignments to only include batches we're generating for
+  const batchIds = new Set(batches.map((b) => b.id));
+  const relevantAssignments = teachingAssignments.filter((a) => batchIds.has(a.batchId));
+
+  if (relevantAssignments.length === 0) {
+    return {
+      entries: [],
+      unscheduled: [],
+      conflicts: [],
+      message: "No teaching assignments found for the selected center and week.",
+    };
+  }
+
+  // Build availability map: teacherId -> { "day-startTime": boolean }
+  const availabilityMap: Record<string, Record<string, boolean>> = {};
   for (const t of teachers) {
-    for (const s of t.subjects) {
-      subjectLookup[s.subject.id] = s.subject.code;
+    availabilityMap[t.id] = {};
+    for (const a of t.availability) {
+      availabilityMap[t.id][`${a.dayOfWeek}-${a.startTime}`] = a.isAvailable;
     }
   }
-  const subjectList = Object.entries(subjectLookup).map(([id, code]) => `${id}=${code}`).join(",");
 
-  const teacherMap = new Map(teachers.map((t) => [t.id, t]));
+  // Build leave day map: teacherId -> [dayOfWeek numbers]
+  const leaveDayMap: Record<string, number[]> = {};
+  for (const l of approvedLeaves) {
+    if (!leaveDayMap[l.teacherId]) leaveDayMap[l.teacherId] = [];
+    const start = new Date(l.startDate);
+    const end = new Date(l.endDate);
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const day = d.getDay();
+      const adjustedDay = day === 0 ? 6 : day - 1; // Convert Sun=0..Sat=6 to Mon=0..Sun=6
+      if (adjustedDay < 6) leaveDayMap[l.teacherId].push(adjustedDay);
+    }
+  }
 
-  const allTeacherData = teachers.map((t) => ({
-    id: t.id,
-    name: t.user.name,
-    type: t.employmentType,
-    subjects: t.subjects.map((s) => s.subject.id),
-    unavailable: t.availability.filter((a) => !a.isAvailable).map((a) => `${a.dayOfWeek}-${a.startTime}`),
-  }));
+  // Build classroom block set: "classroomId-day-startTime"
+  const classroomBlockSet = new Set<string>();
+  for (const b of classroomBlocks) {
+    const blockDate = new Date(b.date);
+    const day = blockDate.getDay();
+    const adjustedDay = day === 0 ? 6 : day - 1;
+    classroomBlockSet.add(`${b.classroomId}-${adjustedDay}-${b.startTime}`);
+  }
 
-  const allAssignmentData = teachingAssignments.map((a) => {
+  // Process assignments into indexed list with human-readable names
+  const processedAssignments: ProcessedAssignment[] = relevantAssignments.map((a, i) => {
     const startDate = new Date(a.startDate);
     const endDate = new Date(a.endDate);
     const totalWeeks = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)));
     const remainingHours = a.totalHours - a.completedHours;
     const hoursPerWeek = remainingHours / totalWeeks;
-    const slotsPerWeek = Math.ceil(hoursPerWeek / 1.5);
-    return { t: a.teacherId, b: a.batchId, s: a.subjectId, slots: slotsPerWeek };
+    const slotsPerWeek = Math.max(1, Math.ceil(hoursPerWeek / 1.5));
+
+    const teacher = teachers.find((t) => t.id === a.teacherId);
+
+    return {
+      index: i,
+      teacherId: a.teacherId,
+      teacherName: a.teacher.user.name,
+      batchId: a.batchId,
+      batchName: a.batch.name,
+      batchType: a.batch.batchType,
+      centerId: a.batch.centerId,
+      centerName: a.batch.center.name,
+      subjectId: a.subjectId,
+      subjectName: a.subject.name,
+      subjectCode: a.subject.code,
+      slotsPerWeek,
+      batchStrength: batches.find((b) => b.id === a.batchId)?.strength || 30,
+      employmentType: teacher?.employmentType || "FULL_TIME",
+    };
   });
 
-  const slotData = timeSlots.map((s) => ({ start: s.startTime, end: s.endTime }));
-
-  const classroomRestrictions = classroomBlocks.map((b) => {
-    const blockDate = new Date(b.date);
-    const dayOfWeek = blockDate.getDay();
-    const adjustedDay = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    return { room: b.classroomId, day: adjustedDay, start: b.startTime };
-  });
-
-  const teacherLeaveData = approvedLeaves.map((l) => {
-    const leaveDays: number[] = [];
-    const start = new Date(l.startDate);
-    const end = new Date(l.endDate);
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const day = d.getDay();
-      const adjustedDay = day === 0 ? 6 : day - 1;
-      if (adjustedDay < 6) leaveDays.push(adjustedDay);
-    }
-    return { teacher: l.teacherId, days: leaveDays };
-  });
-
-  // Fetch custom prompt from settings
-  const customPromptSetting = await prisma.settings.findUnique({
-    where: { key: "ai_custom_prompt" },
-  });
+  // Fetch custom prompt and consecutive slots preference
+  const [customPromptSetting, consecutiveSlotsSetting] = await Promise.all([
+    prisma.settings.findUnique({ where: { key: "ai_custom_prompt" } }),
+    prisma.settings.findUnique({ where: { key: "consecutive_slots" } }),
+  ]);
   const customPrompt = customPromptSetting?.value || "";
+  const consecutiveSlotsValue = consecutiveSlotsSetting?.value || "2";
+  const consecutiveSlotsPref = consecutiveSlotsValue === "custom" ? 0 : parseInt(consecutiveSlotsValue) || 2;
 
-  // ─── Split by center ───
-  // Group batches by centerId
-  const centerIds = [...new Set(batches.map((b) => b.centerId))];
+  // ─── Phase 1: AI Day Planning ───
+  console.log(`[Timetable] Phase 1: AI day planning for ${processedAssignments.length} assignments`);
 
-  let allEntries: GeneratedEntry[] = [];
-  const allConflicts: string[] = [];
+  const prompt = buildDayPlanningPrompt(processedAssignments, availabilityMap, leaveDayMap, customPrompt);
 
-  // Track teacher bookings across centers to avoid cross-center conflicts
-  const globalTeacherSlots: Record<string, Set<string>> = {};
-
-  for (const cid of centerIds) {
-    const centerBatches = batches
-      .filter((b) => b.centerId === cid)
-      .map((b) => ({
-        id: b.id,
-        name: b.name,
-        center: b.centerId,
-        strength: b.strength,
-        subjects: b.batchSubjects.map((bs) => ({ id: bs.subject.id, hpw: bs.hoursPerWeek })),
-      }));
-
-    const centerClassrooms = classrooms
-      .filter((c) => c.centerId === cid)
-      .map((c) => ({ id: c.id, name: c.name, cap: c.capacity }));
-
-    const batchIds = new Set(centerBatches.map((b) => b.id));
-    const centerAssignments = allAssignmentData.filter((a) => batchIds.has(a.b));
-
-    // Only include teachers who have assignments at this center
-    const teacherIdsForCenter = new Set(centerAssignments.map((a) => a.t));
-    const centerTeachers = allTeacherData.filter((t) => teacherIdsForCenter.has(t.id));
-
-    if (centerBatches.length === 0 || centerAssignments.length === 0) continue;
-
-    // Add already-booked slots to teacher unavailability (from previous centers)
-    const teachersWithGlobalBlocks = centerTeachers.map((t) => {
-      const booked = globalTeacherSlots[t.id];
-      if (!booked || booked.size === 0) return t;
-      return {
-        ...t,
-        unavailable: [...t.unavailable, ...Array.from(booked)],
-      };
-    });
-
-    const prompt = buildPromptForCenter(
-      centerBatches,
-      centerClassrooms,
-      teachersWithGlobalBlocks,
-      centerAssignments,
-      slotData,
-      subjectList,
-      classroomRestrictions,
-      teacherLeaveData,
-      customPrompt,
-    );
-
-    console.log(`Generating for center ${cid}: ${centerBatches.length} batches, ${centerAssignments.length} assignments`);
-
-    let responseText: string;
-    if (provider === "gemini") {
-      responseText = await callGemini(prompt, apiKey);
-    } else {
-      responseText = await callClaude(prompt, apiKey);
-    }
-
-    let centerEntries = parseJSON(responseText);
-
-    // Filter invalid
-    centerEntries = centerEntries.filter((e) =>
-      e.batchId && e.subjectId && e.teacherId && e.classroomId &&
-      typeof e.dayOfWeek === "number" && e.startTime && e.endTime
-    );
-
-    // Track teacher slots globally
-    for (const entry of centerEntries) {
-      const timeKey = `${entry.dayOfWeek}-${entry.startTime}`;
-      if (!globalTeacherSlots[entry.teacherId]) globalTeacherSlots[entry.teacherId] = new Set();
-      globalTeacherSlots[entry.teacherId].add(timeKey);
-    }
-
-    allEntries = allEntries.concat(centerEntries);
+  let responseText: string;
+  if (provider === "gemini") {
+    responseText = await callGemini(prompt, apiKey);
+  } else {
+    responseText = await callClaude(prompt, apiKey);
   }
 
-  // ─── Validate all entries ───
-  const teacherSlots: Record<string, Set<string>> = {};
-  const classroomSlots: Record<string, Set<string>> = {};
+  let aiPlan = parseJSON<AIPlanEntry>(responseText);
 
-  const teacherAvailMap: Record<string, Record<string, boolean>> = {};
-  for (const t of teachers) {
-    teacherAvailMap[t.id] = {};
-    for (const a of t.availability) {
-      teacherAvailMap[t.id][`${a.dayOfWeek}-${a.startTime}`] = a.isAvailable;
+  // Validate AI plan entries
+  aiPlan = aiPlan.filter(
+    (p) => typeof p.a === "number" && Array.isArray(p.d) && p.d.every((d) => typeof d === "number")
+  );
+
+  console.log(`[Timetable] AI returned ${aiPlan.length} day plans`);
+
+  // Handle missing assignments — if AI didn't plan some, add fallback days
+  const plannedIndices = new Set(aiPlan.map((p) => p.a));
+  for (const assignment of processedAssignments) {
+    if (!plannedIndices.has(assignment.index)) {
+      // Fallback: spread across available days
+      const availDays: number[] = [];
+      for (let d = 0; d < 6; d++) {
+        if (leaveDayMap[assignment.teacherId]?.includes(d)) continue;
+        const avail = availabilityMap[assignment.teacherId] || {};
+        for (const key of Object.keys(avail)) {
+          if (key.startsWith(`${d}-`) && avail[key]) {
+            availDays.push(d);
+            break;
+          }
+        }
+      }
+      // Pick first N days
+      const days = availDays.slice(0, assignment.slotsPerWeek);
+      if (days.length > 0) {
+        aiPlan.push({ a: assignment.index, d: days });
+      }
     }
   }
 
-  for (const entry of allEntries) {
-    const timeKey = `${entry.dayOfWeek}-${entry.startTime}`;
+  // ─── Phase 2: Deterministic Scheduling ───
+  console.log(`[Timetable] Phase 2: Deterministic slot/room assignment`);
 
-    if (!teacherSlots[entry.teacherId]) teacherSlots[entry.teacherId] = new Set();
-    if (teacherSlots[entry.teacherId].has(timeKey)) {
-      const t = teacherMap.get(entry.teacherId);
-      allConflicts.push(`Teacher ${t?.user.name || entry.teacherId} double-booked: day ${entry.dayOfWeek}, ${entry.startTime}`);
-    }
-    teacherSlots[entry.teacherId].add(timeKey);
+  const slotData = timeSlots.map((s) => ({
+    id: s.id,
+    startTime: s.startTime,
+    endTime: s.endTime,
+    order: s.order,
+  }));
 
-    if (!classroomSlots[entry.classroomId]) classroomSlots[entry.classroomId] = new Set();
-    if (classroomSlots[entry.classroomId].has(timeKey)) {
-      const room = classrooms.find((c) => c.id === entry.classroomId);
-      allConflicts.push(`Classroom ${room?.name || entry.classroomId} double-booked: day ${entry.dayOfWeek}, ${entry.startTime}`);
-    }
-    classroomSlots[entry.classroomId].add(timeKey);
+  const classroomData = classrooms.map((c) => ({
+    id: c.id,
+    name: c.name,
+    centerId: c.centerId,
+    capacity: c.capacity,
+  }));
 
-    const avail = teacherAvailMap[entry.teacherId];
-    if (avail && avail[timeKey] === false) {
-      const t = teacherMap.get(entry.teacherId);
-      allConflicts.push(`Teacher ${t?.user.name || entry.teacherId} unavailable: day ${entry.dayOfWeek}, ${entry.startTime}`);
-    }
+  const { entries, unscheduled } = scheduleFromAIPlan(
+    aiPlan,
+    processedAssignments,
+    slotData,
+    classroomData,
+    availabilityMap,
+    leaveDayMap,
+    classroomBlockSet,
+    consecutiveSlotsPref,
+  );
 
-    const teacherLeave = teacherLeaveData.find(
-      (l) => l.teacher === entry.teacherId && l.days.includes(entry.dayOfWeek)
-    );
-    if (teacherLeave) {
-      const t = teacherMap.get(entry.teacherId);
-      allConflicts.push(`Teacher ${t?.user.name || entry.teacherId} on leave: day ${entry.dayOfWeek}`);
-    }
+  // ─── Phase 3: Report results ───
+  const totalNeeded = processedAssignments.reduce((sum, a) => sum + a.slotsPerWeek, 0);
+  const scheduled = entries.length;
+
+  let message: string;
+  if (unscheduled.length === 0) {
+    message = `✅ Successfully scheduled all ${scheduled} entries with zero conflicts.`;
+  } else {
+    message = `Scheduled ${scheduled}/${totalNeeded} entries. ${unscheduled.length} could not be scheduled.`;
   }
+
+  console.log(`[Timetable] Result: ${scheduled} scheduled, ${unscheduled.length} unscheduled`);
 
   return {
-    entries: allEntries,
-    conflicts: allConflicts,
-    message: allConflicts.length > 0
-      ? `Generated ${allEntries.length} entries with ${allConflicts.length} conflicts`
-      : `Successfully generated ${allEntries.length} conflict-free entries`,
+    entries,
+    unscheduled,
+    conflicts: [], // always empty — algorithm guarantees no conflicts
+    message,
   };
 }

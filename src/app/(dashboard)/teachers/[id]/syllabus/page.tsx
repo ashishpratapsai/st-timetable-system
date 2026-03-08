@@ -86,7 +86,7 @@ export default function TeacherSyllabusPage({ params }: { params: Promise<{ id: 
   return (
     <div>
       <Header title="Teacher Syllabus" />
-      <div className="p-6 animate-fadeIn">
+      <div className="p-3 sm:p-4 md:p-6 animate-fadeIn">
         <button onClick={() => router.push("/teachers")} className="text-blue-600 hover:text-blue-700 transition-colors text-sm mb-2 inline-block">
           &larr; Back to Teachers
         </button>

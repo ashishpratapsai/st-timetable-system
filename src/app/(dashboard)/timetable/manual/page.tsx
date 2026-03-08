@@ -280,7 +280,7 @@ export default function ManualTimetablePage() {
     return (
       <div>
         <Header title="Manual Timetable Editor" />
-        <div className="p-6">
+        <div className="p-3 sm:p-4 md:p-6">
           <div className="py-12 space-y-4">
             <div className="h-10 skeleton w-full max-w-2xl mx-auto" />
             <div className="h-10 skeleton w-full max-w-2xl mx-auto opacity-75" />
