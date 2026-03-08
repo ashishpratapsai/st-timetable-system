@@ -29,9 +29,27 @@ interface UnscheduledItem {
 }
 
 interface Center { id: string; name: string; }
-interface TimeSlot { id: string; startTime: string; endTime: string; label: string; order: number; }
+interface TimeSlot { id: string; startTime: string; endTime: string; label: string; order: number; scope: string; }
 interface BatchOption { id: string; name: string; batchType: string; }
 interface TeacherOption { id: string; name: string; }
+
+interface ValidationIssue {
+  type: "error" | "warning" | "info";
+  category: string;
+  message: string;
+  teacherName?: string;
+  suggestion?: string;
+}
+
+interface TimetableVersion {
+  id: string;
+  label: string;
+  scope: string | null;
+  isActive: boolean;
+  entryCount: number;
+  createdAt: string;
+  status: string;
+}
 
 type Scope = "senior" | "junior" | "all";
 const SENIOR_BATCH_TYPES = ["IIT_JEE", "JEE_MAINS", "NEET"];
@@ -92,27 +110,46 @@ export default function TimetablePage() {
   const [unscheduledItems, setUnscheduledItems] = useState<UnscheduledItem[]>([]);
   const [showUnscheduled, setShowUnscheduled] = useState(false);
 
+  // Pre-validation state
+  const [validating, setValidating] = useState(false);
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [validationIssues, setValidationIssues] = useState<ValidationIssue[]>([]);
+  const [overriddenIssues, setOverriddenIssues] = useState<Set<number>>(new Set());
+
+  // Version management state
+  const [versions, setVersions] = useState<TimetableVersion[]>([]);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [showCompare, setShowCompare] = useState(false);
+  const [compareVersionId, setCompareVersionId] = useState<string | null>(null);
+  const [compareEntries, setCompareEntries] = useState<TimetableEntry[]>([]);
+  const [settingActive, setSettingActive] = useState(false);
+  const [deletingVersion, setDeletingVersion] = useState<string | null>(null);
+
   async function fetchData() {
     setLoading(true);
     const params = new URLSearchParams({ weekStart: selectedWeek });
     if (selectedCenter) params.set("centerId", selectedCenter);
+    // If viewing a specific version, pass versionId
+    if (selectedVersionId) params.set("versionId", selectedVersionId);
 
-    const [e, c, s, b, t] = await Promise.all([
+    const [e, c, s, b, t, v] = await Promise.all([
       fetch(`/api/timetable/entries?${params}`).then((r) => r.json()),
       fetch("/api/centers").then((r) => r.json()),
       fetch("/api/time-slots").then((r) => r.json()),
       fetch("/api/batches").then((r) => r.json()),
       fetch("/api/teachers").then((r) => r.json()),
+      fetch(`/api/timetable/versions?weekStart=${selectedWeek}`).then((r) => r.json()).catch(() => []),
     ]);
     setEntries(e);
     setCenters(c);
     setTimeSlots(s);
     setBatches((b || []).map((batch: { id: string; name: string; batchType: string }) => ({ id: batch.id, name: batch.name, batchType: batch.batchType })));
     setTeachers((t || []).map((teacher: { id: string; user: { name: string } }) => ({ id: teacher.id, name: teacher.user.name })));
+    setVersions(Array.isArray(v) ? v : []);
     setLoading(false);
   }
 
-  useEffect(() => { fetchData(); }, [selectedWeek, selectedCenter]);
+  useEffect(() => { fetchData(); }, [selectedWeek, selectedCenter, selectedVersionId]);
 
   // Filter entries based on scope + selected batch AND/OR teacher
   const filteredEntries = entries.filter((e) => {
@@ -135,6 +172,17 @@ export default function TimetablePage() {
   const scopedTeachers = selectedScope === "all"
     ? teachers
     : teachers.filter((t) => scopedTeacherIds.has(t.id));
+
+  // Scope-aware time slot filtering
+  const filteredSlots = timeSlots.filter((s) =>
+    selectedScope === "all" || s.scope === "all" || s.scope === selectedScope
+  );
+
+  // Active version info
+  const activeVersion = versions.find((v) => v.isActive);
+  const viewingVersion = selectedVersionId
+    ? versions.find((v) => v.id === selectedVersionId)
+    : activeVersion;
 
   function openGenerateModal() {
     setGeneratePrefs({ ...DEFAULT_PREFERENCES });
@@ -178,16 +226,15 @@ export default function TimetablePage() {
     return parts.join("\n");
   }
 
-  async function handleGenerate() {
+  // Step 1: After questionnaire, run validation first
+  async function handlePreValidate() {
     setShowGenerateModal(false);
-    setGenerating(true);
-    setUnscheduledItems([]);
+    setValidating(true);
+    setOverriddenIssues(new Set());
 
     try {
-      // Build prompt from questionnaire preferences
+      // Save custom prompt first so validation can use it
       const builtPrompt = buildPromptFromPreferences(generatePrefs);
-
-      // Save custom prompt and consecutive slot preference
       await Promise.all([
         fetch("/api/settings", {
           method: "POST",
@@ -204,6 +251,51 @@ export default function TimetablePage() {
       const res = await fetch("/api/timetable/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          centerId: selectedCenter || null,
+          weekStart: selectedWeek,
+          scope: selectedScope,
+          mode: "validate",
+        }),
+      });
+      const data = await res.json();
+
+      if (data.error) {
+        alert(`Validation error: ${data.error}`);
+        setValidating(false);
+        return;
+      }
+
+      const issues: ValidationIssue[] = data.issues || [];
+      setValidationIssues(issues);
+
+      // If no errors (only warnings/info), go straight to generation
+      const hasErrors = issues.some((i) => i.type === "error");
+      if (!hasErrors && issues.length <= 3) {
+        // Few/no issues — proceed directly
+        setValidating(false);
+        await handleGenerate();
+      } else {
+        // Show validation modal for review
+        setValidating(false);
+        setShowValidationModal(true);
+      }
+    } catch (err) {
+      alert(`Validation failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+      setValidating(false);
+    }
+  }
+
+  // Step 2: Actual generation (called after validation passes or admin overrides)
+  async function handleGenerate() {
+    setShowValidationModal(false);
+    setGenerating(true);
+    setUnscheduledItems([]);
+
+    try {
+      const res = await fetch("/api/timetable/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ centerId: selectedCenter || null, weekStart: selectedWeek, scope: selectedScope }),
       });
 
@@ -217,11 +309,19 @@ export default function TimetablePage() {
 
       // Save entries (guaranteed conflict-free by the algorithm)
       if (data.entries && data.entries.length > 0) {
-        await fetch("/api/timetable/save", {
+        const saveRes = await fetch("/api/timetable/save", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ entries: data.entries, weekStart: selectedWeek, scope: selectedScope }),
         });
+        const saveData = await saveRes.json();
+        if (saveData.versionLabel) {
+          alert(`${data.message}\nSaved as: ${saveData.versionLabel}`);
+        } else {
+          alert(data.message);
+        }
+      } else {
+        alert(data.message || "No entries generated.");
       }
 
       // Store unscheduled items
@@ -230,12 +330,66 @@ export default function TimetablePage() {
         setShowUnscheduled(true);
       }
 
-      alert(data.message);
+      // Reset version selection to show active
+      setSelectedVersionId(null);
       fetchData();
     } catch (err) {
       alert(`Failed to generate: ${err instanceof Error ? err.message : "Unknown error"}`);
     }
     setGenerating(false);
+  }
+
+  // Version management functions
+  async function handleSetActiveVersion(versionId: string) {
+    setSettingActive(true);
+    try {
+      const res = await fetch("/api/timetable/versions", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ versionId }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        alert(`Error: ${data.error}`);
+      } else {
+        setSelectedVersionId(null);
+        fetchData();
+      }
+    } catch {
+      alert("Failed to set active version");
+    }
+    setSettingActive(false);
+  }
+
+  async function handleDeleteVersion(versionId: string) {
+    if (!confirm("Delete this version? This cannot be undone.")) return;
+    setDeletingVersion(versionId);
+    try {
+      const res = await fetch(`/api/timetable/versions?versionId=${versionId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.error) {
+        alert(`Error: ${data.error}`);
+      } else {
+        if (selectedVersionId === versionId) setSelectedVersionId(null);
+        fetchData();
+      }
+    } catch {
+      alert("Failed to delete version");
+    }
+    setDeletingVersion(null);
+  }
+
+  async function handleStartCompare(versionId: string) {
+    setCompareVersionId(versionId);
+    setShowCompare(true);
+    try {
+      const params = new URLSearchParams({ weekStart: selectedWeek, versionId });
+      const res = await fetch(`/api/timetable/entries?${params}`);
+      const data = await res.json();
+      setCompareEntries(Array.isArray(data) ? data : []);
+    } catch {
+      setCompareEntries([]);
+    }
   }
 
   function getWeekDates() {
@@ -299,12 +453,12 @@ export default function TimetablePage() {
                 className="bg-white text-slate-700 border border-slate-300 px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg hover:bg-slate-50 hover:shadow-md transition-all duration-200 text-xs sm:text-sm font-medium flex-1 sm:flex-initial text-center">
                 Manual Editor
               </a>
-              <button onClick={openGenerateModal} disabled={generating}
+              <button onClick={openGenerateModal} disabled={generating || validating}
                 className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 sm:px-6 py-2 sm:py-2.5 rounded-lg hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-200 text-xs sm:text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2 flex-1 sm:flex-initial">
-                {generating ? (
+                {generating || validating ? (
                   <>
                     <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                    Generating...
+                    {validating ? "Validating..." : "Generating..."}
                   </>
                 ) : (
                   <>
@@ -469,6 +623,125 @@ export default function TimetablePage() {
           </div>
         )}
 
+        {/* Version Selector */}
+        {versions.length > 0 && isAdmin && (
+          <div className="mb-4 bg-white border border-slate-200/70 rounded-xl p-3 sm:p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>
+                <span className="text-sm font-semibold text-slate-700">Versions ({versions.length}/5)</span>
+              </div>
+              {showCompare && (
+                <button onClick={() => { setShowCompare(false); setCompareVersionId(null); setCompareEntries([]); }}
+                  className="text-xs text-red-600 hover:text-red-700 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors">
+                  Exit Compare
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {versions.map((v) => {
+                const isViewing = selectedVersionId === v.id || (!selectedVersionId && v.isActive);
+                const isComparing = compareVersionId === v.id;
+                return (
+                  <div key={v.id}
+                    className={`group relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all duration-200 cursor-pointer ${
+                      isComparing
+                        ? "border-purple-400 bg-purple-50 text-purple-700"
+                        : isViewing
+                          ? "border-blue-400 bg-blue-50 text-blue-700 shadow-sm"
+                          : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                    onClick={() => {
+                      if (showCompare && !isViewing) {
+                        handleStartCompare(v.id);
+                      } else {
+                        setSelectedVersionId(v.isActive ? null : v.id);
+                        setShowCompare(false);
+                        setCompareVersionId(null);
+                      }
+                    }}
+                  >
+                    {v.label || "Untitled"}
+                    {v.isActive && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-semibold">
+                        <span className="w-1 h-1 rounded-full bg-green-500" />
+                        Active
+                      </span>
+                    )}
+                    <span className="text-[10px] text-slate-400">{v.entryCount} entries</span>
+
+                    {/* Actions on hover */}
+                    <div className="hidden group-hover:flex items-center gap-0.5 ml-1">
+                      {!v.isActive && !showCompare && (
+                        <button
+                          onClick={(evt) => { evt.stopPropagation(); handleSetActiveVersion(v.id); }}
+                          disabled={settingActive}
+                          className="p-0.5 rounded text-green-600 hover:bg-green-100 transition-colors"
+                          title="Set as active"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                          </svg>
+                        </button>
+                      )}
+                      {!v.isActive && (
+                        <button
+                          onClick={(evt) => { evt.stopPropagation(); handleDeleteVersion(v.id); }}
+                          disabled={deletingVersion === v.id}
+                          className="p-0.5 rounded text-red-500 hover:bg-red-100 transition-colors"
+                          title="Delete version"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                          </svg>
+                        </button>
+                      )}
+                      {!showCompare && versions.length > 1 && (
+                        <button
+                          onClick={(evt) => {
+                            evt.stopPropagation();
+                            // Start compare: current view is "A", click another for "B"
+                            setSelectedVersionId(v.isActive ? null : v.id);
+                            setShowCompare(true);
+                            setCompareVersionId(null);
+                            setCompareEntries([]);
+                          }}
+                          className="p-0.5 rounded text-purple-600 hover:bg-purple-100 transition-colors"
+                          title="Compare with another version"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {showCompare && !compareVersionId && (
+              <p className="mt-2 text-xs text-purple-600 animate-pulse">
+                👆 Click another version to compare with the current view
+              </p>
+            )}
+            {/* Viewing non-active version banner */}
+            {viewingVersion && !viewingVersion.isActive && (
+              <div className="mt-2 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 text-xs text-amber-700">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                </svg>
+                Viewing: <strong>{viewingVersion.label}</strong> (not active)
+                <button onClick={() => setSelectedVersionId(null)} className="ml-auto text-amber-600 hover:text-amber-800 font-medium">
+                  Back to active
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Legend */}
         {(substitutedCount > 0 || cancelledCount > 0) && (
           <div className="flex gap-4 mb-4 text-xs">
@@ -479,6 +752,29 @@ export default function TimetablePage() {
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded bg-rose-50 border border-red-200"></div>
               <span className="text-slate-600">Cancelled</span>
+            </div>
+          </div>
+        )}
+
+        {/* Compare mode summary */}
+        {showCompare && compareVersionId && compareEntries.length > 0 && (
+          <div className="mb-4 bg-purple-50 border border-purple-200 rounded-xl p-3 sm:p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold text-purple-800">Comparison View</span>
+              <div className="flex gap-3 text-xs">
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded bg-red-100 border border-red-200" />
+                  Only in current ({filteredEntries.filter((e) => !compareEntries.some((ce) => ce.batch.id === e.batch.id && ce.teacher.id === e.teacher.id && ce.dayOfWeek === e.dayOfWeek && ce.startTime === e.startTime)).length})
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded bg-green-100 border border-green-200" />
+                  Only in compare ({compareEntries.filter((ce) => !filteredEntries.some((e) => e.batch.id === ce.batch.id && e.teacher.id === ce.teacher.id && e.dayOfWeek === ce.dayOfWeek && e.startTime === ce.startTime)).length})
+                </span>
+              </div>
+            </div>
+            <div className="flex gap-4 text-xs text-purple-600">
+              <span>Current: <strong>{viewingVersion?.label || "Active"}</strong> — {filteredEntries.length} entries</span>
+              <span>Compare: <strong>{versions.find((v) => v.id === compareVersionId)?.label || "?"}</strong> — {compareEntries.length} entries</span>
             </div>
           </div>
         )}
@@ -528,20 +824,32 @@ export default function TimetablePage() {
                 </tr>
               </thead>
               <tbody>
-                {timeSlots.map((slot) => (
+                {filteredSlots.map((slot) => (
                   <tr key={slot.id} className="border-b border-slate-100">
                     <td className="px-3 sm:px-4 py-2 text-xs font-medium text-slate-500 sticky left-0 bg-white whitespace-nowrap">
                       {slot.startTime} - {slot.endTime}
                     </td>
                     {weekDates.map((_, dayIndex) => {
                       const slotEntries = getEntriesForSlot(dayIndex, slot.startTime);
+                      // In compare mode, find entries from compare version for this cell
+                      const compareSlotEntries = showCompare && compareVersionId
+                        ? compareEntries.filter((ce) => ce.dayOfWeek === dayIndex && ce.startTime === slot.startTime)
+                        : [];
+                      // Determine diff highlights
+                      const currentKeys = new Set(slotEntries.map((e) => `${e.batch.id}-${e.teacher.id}`));
+                      const compareKeys = new Set(compareSlotEntries.map((e) => `${e.batch.id}-${e.teacher.id}`));
                       return (
                         <td key={dayIndex} className="px-1 py-1">
                           {slotEntries.map((e) => {
-                            const styleClass = getEntryStyle(e);
+                            const key = `${e.batch.id}-${e.teacher.id}`;
+                            const isRemoved = showCompare && compareVersionId && !compareKeys.has(key);
+                            const styleClass = isRemoved
+                              ? "bg-red-50 text-red-400 border-red-200"
+                              : getEntryStyle(e);
                             return (
                               <div key={e.id}
-                                className={`${styleClass} border rounded-lg p-2 text-xs mb-1`}>
+                                className={`${styleClass} border rounded-lg p-2 text-xs mb-1 ${isRemoved ? "opacity-60" : ""}`}>
+                                {isRemoved && <span className="text-[9px] bg-red-100 text-red-600 px-1 rounded">Only in current</span>}
                                 <div className="font-semibold">
                                   {e.subject.code}
                                   {e.classType === "REVISION" && (
@@ -570,6 +878,19 @@ export default function TimetablePage() {
                               </div>
                             );
                           })}
+                          {/* Show entries only in compare version (new/added) */}
+                          {compareSlotEntries
+                            .filter((ce) => !currentKeys.has(`${ce.batch.id}-${ce.teacher.id}`))
+                            .map((ce) => (
+                              <div key={ce.id}
+                                className="bg-green-50 text-green-700 border-green-200 border rounded-lg p-2 text-xs mb-1 opacity-75">
+                                <span className="text-[9px] bg-green-100 text-green-600 px-1 rounded">Only in compare</span>
+                                <div className="font-semibold">{ce.subject.code}</div>
+                                <div className="text-[10px] opacity-80">{ce.batch.name}</div>
+                                <div className="text-[10px] opacity-70">{ce.teacher.user.name}</div>
+                                <div className="text-[10px] opacity-60">{ce.classroom.name}</div>
+                              </div>
+                            ))}
                         </td>
                       );
                     })}
@@ -580,6 +901,135 @@ export default function TimetablePage() {
           </div>
         )}
       </div>
+
+      {/* Pre-Validation Results Modal */}
+      {showValidationModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-2xl animate-fadeIn max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shrink-0">
+                  <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Pre-Generation Check</h2>
+                  <p className="text-xs text-slate-500">Review these findings before generating</p>
+                </div>
+              </div>
+
+              {/* Group issues by type */}
+              {(() => {
+                const errors = validationIssues.filter((i) => i.type === "error");
+                const warnings = validationIssues.filter((i) => i.type === "warning");
+                const infos = validationIssues.filter((i) => i.type === "info");
+                return (
+                  <div className="space-y-4">
+                    {errors.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-red-700 mb-2 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-red-500" /> Errors ({errors.length})
+                        </h3>
+                        <div className="space-y-2">
+                          {errors.map((issue, idx) => {
+                            const globalIdx = validationIssues.indexOf(issue);
+                            const isOverridden = overriddenIssues.has(globalIdx);
+                            return (
+                              <div key={idx} className={`rounded-lg border p-3 transition-all ${isOverridden ? "border-slate-200 bg-slate-50 opacity-60" : "border-red-200 bg-red-50"}`}>
+                                <p className={`text-sm ${isOverridden ? "text-slate-500 line-through" : "text-red-800"}`}>
+                                  {issue.message}
+                                </p>
+                                {issue.teacherName && (
+                                  <p className="text-xs text-red-500 mt-0.5">Teacher: {issue.teacherName}</p>
+                                )}
+                                {issue.suggestion && (
+                                  <p className="text-xs text-red-600 mt-1 italic">{issue.suggestion}</p>
+                                )}
+                                {!isOverridden ? (
+                                  <button
+                                    onClick={() => setOverriddenIssues((prev) => new Set([...prev, globalIdx]))}
+                                    className="mt-2 text-xs font-medium text-amber-700 hover:text-amber-800 bg-amber-100 hover:bg-amber-200 px-2 py-1 rounded transition-colors"
+                                  >
+                                    Override — Proceed Anyway
+                                  </button>
+                                ) : (
+                                  <span className="mt-2 inline-block text-xs font-medium text-slate-500 bg-slate-200 px-2 py-1 rounded">
+                                    ✓ Overridden
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    {warnings.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-amber-700 mb-2 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-amber-500" /> Warnings ({warnings.length})
+                        </h3>
+                        <div className="space-y-2">
+                          {warnings.map((issue, idx) => (
+                            <div key={idx} className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                              <p className="text-sm text-amber-800">{issue.message}</p>
+                              {issue.teacherName && (
+                                <p className="text-xs text-amber-500 mt-0.5">Teacher: {issue.teacherName}</p>
+                              )}
+                              {issue.suggestion && (
+                                <p className="text-xs text-amber-600 mt-1 italic">{issue.suggestion}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {infos.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-blue-700 mb-2 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-blue-500" /> Info
+                        </h3>
+                        <div className="space-y-2">
+                          {infos.map((issue, idx) => (
+                            <div key={idx} className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                              <p className="text-sm text-blue-800">{issue.message}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => { setShowValidationModal(false); setShowGenerateModal(true); }}
+                  className="flex-1 px-4 py-2.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-all duration-200"
+                >
+                  ← Back to Questionnaire
+                </button>
+                <button
+                  onClick={() => {
+                    const unoverriddenErrors = validationIssues.filter((i, idx) => i.type === "error" && !overriddenIssues.has(idx));
+                    if (unoverriddenErrors.length > 0) {
+                      alert(`Please override or fix ${unoverriddenErrors.length} error(s) before proceeding.`);
+                      return;
+                    }
+                    handleGenerate();
+                  }}
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg text-sm font-medium hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-200 flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+                  </svg>
+                  Proceed with Generation
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Generate with AI Modal — Guided Questionnaire */}
       {showGenerateModal && (
@@ -601,13 +1051,18 @@ export default function TimetablePage() {
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-5">
                 <p className="text-xs text-amber-700">
                   {selectedScope === "senior" ? (
-                    <><strong>Generating Senior (11th-12th) timetable only.</strong> Junior classes will not be affected.</>
+                    <><strong>Generating Senior (11th-12th) timetable only.</strong> Junior classes will not be affected. Previous versions are preserved.</>
                   ) : selectedScope === "junior" ? (
-                    <><strong>Generating Junior (8th-10th) timetable only.</strong> Senior classes will not be affected.</>
+                    <><strong>Generating Junior (8th-10th) timetable only.</strong> Senior classes will not be affected. Previous versions are preserved.</>
                   ) : (
-                    <><strong>Note:</strong> This will replace the entire timetable for the selected week. Zero conflicts guaranteed.</>
+                    <><strong>Note:</strong> This will create a new version for the selected week. Previous versions are preserved for comparison. Zero conflicts guaranteed.</>
                   )}
                 </p>
+                {versions.length >= 5 && (
+                  <p className="text-xs text-red-600 mt-1 font-medium">
+                    ⚠️ You have {versions.length} versions. Delete an old version before generating a new one.
+                  </p>
+                )}
               </div>
 
               {/* Q1: Consecutive Slots */}
@@ -743,13 +1198,13 @@ export default function TimetablePage() {
                   Cancel
                 </button>
                 <button
-                  onClick={handleGenerate}
+                  onClick={handlePreValidate}
                   className="flex-1 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg text-sm font-medium hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-200 flex items-center justify-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
                   </svg>
-                  Generate Now
+                  Validate &amp; Generate
                 </button>
               </div>
             </div>

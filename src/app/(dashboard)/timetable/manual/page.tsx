@@ -17,6 +17,7 @@ interface Batch {
   name: string;
   centerId: string;
   strength: number;
+  batchType: string;
   center: { name: string };
 }
 interface Classroom {
@@ -32,6 +33,7 @@ interface TimeSlot {
   endTime: string;
   label: string;
   order: number;
+  scope: string;
 }
 interface Center {
   id: string;
@@ -63,7 +65,7 @@ interface TeachingAssignment {
   hoursPerWeek: number;
   slotsPerWeek: number;
   teacher: { id: string; user: { name: string } };
-  batch: { id: string; name: string; center: { name: string } };
+  batch: { id: string; name: string; batchType: string; center: { name: string } };
   subject: { id: string; name: string; code: string };
 }
 
@@ -74,6 +76,16 @@ interface DragData {
   subjectCode: string;
   batchId: string;
   batchName: string;
+}
+
+type Scope = "senior" | "junior" | "all";
+const SENIOR_BATCH_TYPES = ["IIT_JEE", "JEE_MAINS", "NEET"];
+
+interface AvailabilityRecord {
+  teacherId: string;
+  dayOfWeek: number;
+  startTime: string;
+  isAvailable: boolean;
 }
 
 const SUBJECT_COLORS: Record<string, string> = {
@@ -101,8 +113,11 @@ export default function ManualTimetablePage() {
   });
   const [selectedCenter, setSelectedCenter] = useState("");
   const [selectedBatch, setSelectedBatch] = useState("");
+  const [selectedScope, setSelectedScope] = useState<Scope>("all");
   const [dragOverCell, setDragOverCell] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [availabilityMap, setAvailabilityMap] = useState<Record<string, Record<string, boolean>>>({});
+  const [activeDragData, setActiveDragData] = useState<DragData | null>(null);
 
   const dragDataRef = useRef<DragData | null>(null);
 
@@ -111,7 +126,7 @@ export default function ManualTimetablePage() {
     const params = new URLSearchParams({ weekStart: selectedWeek });
     if (selectedCenter) params.set("centerId", selectedCenter);
 
-    const [e, t, b, c, s, cn, a] = await Promise.all([
+    const [e, t, b, c, s, cn, a, avail] = await Promise.all([
       fetch(`/api/timetable/entries?${params}`).then((r) => r.json()),
       fetch("/api/teachers").then((r) => r.json()),
       fetch("/api/batches").then((r) => r.json()),
@@ -119,6 +134,7 @@ export default function ManualTimetablePage() {
       fetch("/api/time-slots").then((r) => r.json()),
       fetch("/api/centers").then((r) => r.json()),
       fetch("/api/teaching-assignments").then((r) => r.json()),
+      fetch("/api/availability").then((r) => r.json()),
     ]);
     setEntries(Array.isArray(e) ? e : []);
     setTeachers(t);
@@ -127,13 +143,31 @@ export default function ManualTimetablePage() {
     setTimeSlots(s);
     setCenters(cn);
     setAssignments(a);
+
+    // Build availability map: teacherId → { "dayOfWeek-startTime" → boolean }
+    const aMap: Record<string, Record<string, boolean>> = {};
+    if (Array.isArray(avail)) {
+      for (const rec of avail as AvailabilityRecord[]) {
+        if (!aMap[rec.teacherId]) aMap[rec.teacherId] = {};
+        aMap[rec.teacherId][`${rec.dayOfWeek}-${rec.startTime}`] = rec.isAvailable;
+      }
+    }
+    setAvailabilityMap(aMap);
     setLoading(false);
   }, [selectedWeek, selectedCenter]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   // ─── Computed data ───
-  const filteredBatches = batches.filter((b) => !selectedCenter || b.centerId === selectedCenter);
+  const filteredBatches = batches.filter((b) => {
+    if (selectedCenter && b.centerId !== selectedCenter) return false;
+    if (selectedScope === "senior") return SENIOR_BATCH_TYPES.includes(b.batchType);
+    if (selectedScope === "junior") return !SENIOR_BATCH_TYPES.includes(b.batchType);
+    return true;
+  });
+  const filteredSlots = timeSlots.filter((s) =>
+    selectedScope === "all" || s.scope === "all" || s.scope === selectedScope
+  );
   const currentBatch = filteredBatches.find((b) => b.id === selectedBatch) || filteredBatches[0];
   const batchId = currentBatch?.id || "";
 
@@ -161,6 +195,13 @@ export default function ManualTimetablePage() {
     );
   }
 
+  // Check if teacher is unavailable at a given time (from availability grid)
+  function isTeacherUnavailable(teacherId: string, day: number, startTime: string): boolean {
+    const teacherAvail = availabilityMap[teacherId];
+    if (!teacherAvail) return false; // No records = available everywhere
+    return teacherAvail[`${day}-${startTime}`] === false;
+  }
+
   // Find available classroom for batch
   function findAvailableClassroom(forBatchId: string, day: number, startTime: string): Classroom | null {
     const batch = batches.find((b) => b.id === forBatchId);
@@ -178,6 +219,12 @@ export default function ManualTimetablePage() {
   // ─── Drag and Drop ───
   function handleDragStart(data: DragData) {
     dragDataRef.current = data;
+    setActiveDragData(data);
+  }
+
+  function handleDragEnd() {
+    setActiveDragData(null);
+    setDragOverCell(null);
   }
 
   function handleDragOver(e: React.DragEvent, cellKey: string) {
@@ -192,6 +239,7 @@ export default function ManualTimetablePage() {
   async function handleDrop(e: React.DragEvent, day: number, slot: TimeSlot) {
     e.preventDefault();
     setDragOverCell(null);
+    setActiveDragData(null);
     const data = dragDataRef.current;
     if (!data) return;
 
@@ -200,6 +248,10 @@ export default function ManualTimetablePage() {
     // Validate
     if (isTeacherBusy(data.teacherId, day, slot.startTime)) {
       setError(`${data.teacherName} is already teaching at ${DAYS_OF_WEEK[day]} ${slot.startTime}`);
+      return;
+    }
+    if (isTeacherUnavailable(data.teacherId, day, slot.startTime)) {
+      setError(`${data.teacherName} is not available on ${DAYS_OF_WEEK[day]} at ${slot.startTime}`);
       return;
     }
     if (isBatchBusy(data.batchId, day, slot.startTime)) {
@@ -306,6 +358,23 @@ export default function ManualTimetablePage() {
           </a>
         </div>
 
+        {/* Scope Tabs */}
+        <div className="flex gap-1 mb-4 bg-slate-100 p-1 rounded-lg w-fit">
+          {(["all", "senior", "junior"] as Scope[]).map((scope) => (
+            <button
+              key={scope}
+              onClick={() => { setSelectedScope(scope); setSelectedBatch(""); }}
+              className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
+                selectedScope === scope
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {scope === "all" ? "All Batches" : scope === "senior" ? "Senior (11th/12th)" : "Junior (8th-10th)"}
+            </button>
+          ))}
+        </div>
+
         {/* Filters */}
         <div className="grid grid-cols-2 sm:flex sm:gap-3 gap-3 mb-4">
           <div>
@@ -368,7 +437,7 @@ export default function ManualTimetablePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {timeSlots.map((slot) => (
+                  {filteredSlots.map((slot) => (
                     <tr key={slot.id} className="border-b border-slate-100">
                       <td className="px-3 py-1 text-[11px] font-medium text-slate-500 sticky left-0 bg-white whitespace-nowrap">
                         {slot.startTime}-{slot.endTime}
@@ -378,15 +447,22 @@ export default function ManualTimetablePage() {
                         const cellEntries = getEntriesForCell(dayIndex, slot.startTime);
                         const isDragOver = dragOverCell === cellKey;
                         const batchBusy = isBatchBusy(batchId, dayIndex, slot.startTime);
+                        const teacherBusy = activeDragData ? isTeacherBusy(activeDragData.teacherId, dayIndex, slot.startTime) : false;
+                        const teacherNotAvailable = activeDragData ? isTeacherUnavailable(activeDragData.teacherId, dayIndex, slot.startTime) : false;
+
+                        // Determine drag-over state for visual feedback
+                        let dragBgClass = "";
+                        if (isDragOver) {
+                          if (teacherNotAvailable) dragBgClass = "bg-rose-50";
+                          else if (teacherBusy) dragBgClass = "bg-amber-50";
+                          else if (batchBusy) dragBgClass = "bg-rose-50";
+                          else dragBgClass = "bg-blue-50";
+                        }
 
                         return (
                           <td
                             key={dayIndex}
-                            className={`px-1 py-1 min-h-[60px] transition-colors ${
-                              isDragOver
-                                ? batchBusy ? "bg-rose-50" : "bg-blue-50"
-                                : ""
-                            }`}
+                            className={`px-1 py-1 min-h-[60px] transition-colors ${dragBgClass}`}
                             onDragOver={(e) => handleDragOver(e, cellKey)}
                             onDragLeave={handleDragLeave}
                             onDrop={(e) => handleDrop(e, dayIndex, slot)}
@@ -408,14 +484,17 @@ export default function ManualTimetablePage() {
                                 </div>
                               );
                             })}
-                            {cellEntries.length === 0 && isDragOver && !batchBusy && (
-                              <div className="border-2 border-dashed border-blue-300 rounded-lg p-2 text-[10px] text-blue-400 text-center">
-                                Drop here
-                              </div>
-                            )}
-                            {cellEntries.length === 0 && isDragOver && batchBusy && (
-                              <div className="border-2 border-dashed border-red-300 rounded-lg p-2 text-[10px] text-red-400 text-center">
-                                Batch busy
+                            {cellEntries.length === 0 && isDragOver && (
+                              <div className={`border-2 border-dashed rounded-lg p-2 text-[10px] text-center ${
+                                teacherNotAvailable ? "border-red-300 text-red-500" :
+                                teacherBusy ? "border-amber-300 text-amber-600" :
+                                batchBusy ? "border-red-300 text-red-400" :
+                                "border-blue-300 text-blue-400"
+                              }`}>
+                                {teacherNotAvailable ? "Not available" :
+                                 teacherBusy ? "Teacher busy" :
+                                 batchBusy ? "Batch busy" :
+                                 "Drop here"}
                               </div>
                             )}
                           </td>
@@ -463,6 +542,7 @@ export default function ManualTimetablePage() {
                             batchName: a.batch.name,
                           })
                         }
+                        onDragEnd={handleDragEnd}
                         className={`${colorClass} border rounded-lg p-2.5 ${
                           done ? "opacity-50 cursor-not-allowed" : "cursor-grab active:cursor-grabbing hover:shadow-md"
                         } transition-all duration-200`}

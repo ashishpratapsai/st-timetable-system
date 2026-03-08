@@ -2,11 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireAdmin, requireAuth } from "@/lib/utils";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const { error } = await requireAuth();
   if (error) return error;
 
+  const scope = req.nextUrl.searchParams.get("scope");
+
+  const where: Record<string, unknown> = {};
+  if (scope && scope !== "all") {
+    where.OR = [{ scope }, { scope: "all" }];
+  }
+
   const slots = await prisma.timeSlot.findMany({
+    where,
     orderBy: { order: "asc" },
   });
 
@@ -18,7 +26,7 @@ export async function POST(req: NextRequest) {
   if (error) return error;
 
   const body = await req.json();
-  const { startTime, endTime, label, order } = body;
+  const { startTime, endTime, label, order, scope } = body;
 
   if (!startTime || !endTime || !label) {
     return NextResponse.json(
@@ -28,7 +36,7 @@ export async function POST(req: NextRequest) {
   }
 
   const slot = await prisma.timeSlot.create({
-    data: { startTime, endTime, label, order: order || 0 },
+    data: { startTime, endTime, label, order: order || 0, scope: scope || "all" },
   });
 
   return NextResponse.json(slot, { status: 201 });

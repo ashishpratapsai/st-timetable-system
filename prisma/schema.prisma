@@ -165,6 +165,7 @@ model TimeSlot {
   endTime   String // "10:00"
   label     String // "Slot 1 (9:00-10:00)"
   order     Int    @default(0)
+  scope     String @default("all") // "senior", "junior", or "all"
   createdAt DateTime @default(now())
 }
 
@@ -195,6 +196,8 @@ model TimetableEntry {
   status              EntryStatus @default(SCHEDULED)
   classType           ClassType   @default(ACTUAL)
   combinedBatchId     String?     // If set, this is a combined class with another batch
+  versionId           String?     // Links to TimetableGeneration.id for versioning
+  isActive            Boolean     @default(true) // Only active version shows in views
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
@@ -209,14 +212,19 @@ model TimetableEntry {
 }
 
 model TimetableGeneration {
-  id        String   @id @default(cuid())
-  weekStart DateTime
-  centerId  String?
-  status    String   // GENERATING, COMPLETED, FAILED
-  aiResponse Json?
-  conflicts  Json?
-  createdAt DateTime @default(now())
-  createdBy String
+  id          String   @id @default(cuid())
+  weekStart   DateTime
+  centerId    String?
+  scope       String?  // "senior", "junior", "all"
+  status      String   // GENERATING, COMPLETED, FAILED
+  aiResponse  Json?
+  conflicts   Json?
+  entryCount  Int      @default(0)
+  label       String?  // "Version 1", "Version 2", etc.
+  isActive    Boolean  @default(false) // Which version is currently active
+  preferences Json?    // Store questionnaire answers for reference
+  createdAt   DateTime @default(now())
+  createdBy   String
 }
 
 model Leave {

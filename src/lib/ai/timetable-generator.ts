@@ -190,16 +190,33 @@ function buildDayPlanningPrompt(
     teacherDays[a.teacherId] = days;
   }
 
-  // Build human-readable assignment list
+  // Count available slots per teacher per day
+  const teacherDaySlotCount: Record<string, Record<number, number>> = {};
+  for (const a of assignments) {
+    if (teacherDaySlotCount[a.teacherId]) continue;
+    teacherDaySlotCount[a.teacherId] = {};
+    const avail = availabilityMap[a.teacherId] || {};
+    for (let d = 0; d < 7; d++) {
+      if (leaveDayMap[a.teacherId]?.includes(d)) continue;
+      let count = 0;
+      for (const key of Object.keys(avail)) {
+        if (key.startsWith(`${d}-`) && avail[key]) count++;
+      }
+      if (count > 0) teacherDaySlotCount[a.teacherId][d] = count;
+    }
+  }
+
+  // Build human-readable assignment list with per-day slot counts
   const lines: string[] = [];
   for (const a of assignments) {
-    const availDays = Array.from(teacherDays[a.teacherId] || [])
-      .sort()
-      .map((d) => DAY_NAMES[d])
+    const daySlots = teacherDaySlotCount[a.teacherId] || {};
+    const availDaysStr = Object.entries(daySlots)
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([d, count]) => `${DAY_NAMES[Number(d)]}(${count})`)
       .join(",");
     const typeTag = a.employmentType === "PART_TIME" ? " [Part-Time]" : "";
     lines.push(
-      `${a.index}. ${a.teacherName}${typeTag} → ${a.batchName} → ${a.subjectName} (${a.slotsPerWeek} slots/wk, available: ${availDays})`
+      `${a.index}. ${a.teacherName}${typeTag} → ${a.batchName} → ${a.subjectName} (${a.slotsPerWeek} slots/wk, available: ${availDaysStr})`
     );
   }
 
@@ -211,26 +228,30 @@ function buildDayPlanningPrompt(
     teacherNameMap[a.teacherId] = a.teacherName;
   }
 
-  // Build teacher workload summary
+  // Build teacher workload summary with capacity
   const workloadLines: string[] = [];
   for (const [tid, total] of Object.entries(teacherTotalSlots)) {
-    const maxPerDay = 7; // all slots available for any batch type
-    const minDays = Math.ceil(total / maxPerDay);
+    const daySlots = teacherDaySlotCount[tid] || {};
+    const totalCapacity = Object.values(daySlots).reduce((s, c) => s + c, 0);
+    const capWarning = total > totalCapacity ? " ⚠️ NOT ENOUGH CAPACITY" : "";
     workloadLines.push(
-      `  ${teacherNameMap[tid]}: ${total} total slots, max ${maxPerDay}/day → needs at least ${minDays} days`
+      `  ${teacherNameMap[tid]}: ${total} total slots needed, ${totalCapacity} total capacity${capWarning}`
     );
   }
 
   return `You are a school timetable DAY PLANNER. Your ONLY job is to decide which DAYS each teaching assignment should happen.
 
-ASSIGNMENTS (index. Teacher → Batch → Subject (slots needed, available days)):
+ASSIGNMENTS (index. Teacher → Batch → Subject (slots needed, available days with slot count)):
 ${lines.join("\n")}
 
-TEACHER WORKLOAD SUMMARY (spread classes across enough days!):
+The number in parentheses after each day (e.g., Mon(3)) means the teacher has 3 available time slots on Monday.
+If a teacher has 2 slots on a day, do NOT assign more than 2 slots of work to that day for that teacher.
+
+TEACHER WORKLOAD SUMMARY:
 ${workloadLines.join("\n")}
 
 DAYS: Mon=0, Tue=1, Wed=2, Thu=3, Fri=4, Sat=5, Sun=6
-
+${customPrompt ? `\n=== ADMIN INSTRUCTIONS (YOU MUST STRICTLY FOLLOW THESE) ===\n${customPrompt}\n=== END ADMIN INSTRUCTIONS ===\n` : ""}
 SCHEDULING MODEL:
 - Classes are scheduled in CONSECUTIVE BLOCKS (2-3 slots back-to-back per day for each teacher-batch).
 - So an assignment with 4 slots/wk might need only 2 days (2 consecutive slots each day).
@@ -241,16 +262,14 @@ SCHEDULING MODEL:
 CRITICAL RULES:
 1. Return days for each assignment — the algorithm will figure out how many consecutive slots to book per day.
 2. An assignment with N slots/wk needs FEWER days than N (because of consecutive blocks). Use ceil(slots / blockSize) days.
-3. Only pick from the teacher's available days.
-4. All time slots (morning and evening) are available for ALL batch types — no time restriction.
-5. IMPORTANT: Count total slots each teacher has across ALL assignments on each day. Don't overload any day.
-6. Balance teacher workload across the week — use the "needs at least N days" hint above.
-7. A teacher may teach both junior and senior batches — avoid scheduling them at the same time.
-${customPrompt ? `\nADDITIONAL INSTRUCTIONS FROM ADMIN:\n${customPrompt}\n` : ""}
-Return ONLY a JSON array. Each element: {"a": <assignment_index>, "d": [<day_numbers>]}
-Example: [{"a":0,"d":[0,2]},{"a":1,"d":[1,3]}]
+3. ONLY pick from the teacher's available days shown in parentheses. NEVER assign a day with 0 slots.
+4. If a teacher has N available slots on a day, do NOT assign more than N slots of total work to that day.
+5. Balance teacher workload across the week proportionally to each day's capacity.
+6. A teacher may teach both junior and senior batches — avoid scheduling them at the same time.
 
-ONLY the JSON array. No text, no markdown, no explanation.`;
+Return ONLY a JSON array. No markdown code blocks. No explanation. No text before or after.
+Each element: {"a": <assignment_index>, "d": [<day_numbers>]}
+Example: [{"a":0,"d":[0,2]},{"a":1,"d":[1,3]}]`;
 }
 
 // ─── Phase 2: Deterministic Scheduler ───
@@ -603,6 +622,237 @@ function getValidSlotCount(
   return count;
 }
 
+// ─── Deterministic Fallback Plan ───
+
+function buildDeterministicPlan(
+  assignments: ProcessedAssignment[],
+  availabilityMap: Record<string, Record<string, boolean>>,
+  leaveDayMap: Record<string, number[]>,
+): AIPlanEntry[] {
+  const plan: AIPlanEntry[] = [];
+
+  // Track how many slots assigned per teacher per day for load balancing
+  const teacherDayLoad: Record<string, Record<number, number>> = {};
+
+  for (const a of assignments) {
+    // Find available days for this teacher
+    const availDays: { day: number; capacity: number }[] = [];
+    const avail = availabilityMap[a.teacherId] || {};
+    for (let d = 0; d < 7; d++) {
+      if (leaveDayMap[a.teacherId]?.includes(d)) continue;
+      let count = 0;
+      for (const key of Object.keys(avail)) {
+        if (key.startsWith(`${d}-`) && avail[key]) count++;
+      }
+      // If no availability records, assume available (count all 7 potential slots)
+      if (Object.keys(avail).length === 0) count = 7;
+      if (count > 0) availDays.push({ day: d, capacity: count });
+    }
+
+    if (availDays.length === 0) continue;
+
+    // Sort by current load (ascending) to balance across days
+    availDays.sort((a, b) => {
+      const loadA = teacherDayLoad[a.day]?.[a.day] || 0;
+      const loadB = teacherDayLoad[b.day]?.[b.day] || 0;
+      return loadA - loadB;
+    });
+
+    // Pick enough days for this assignment (consecutive blocks = fewer days needed)
+    const blockSize = 2; // default consecutive block size
+    const daysNeeded = Math.ceil(a.slotsPerWeek / blockSize);
+    const selectedDays = availDays.slice(0, Math.min(daysNeeded, availDays.length)).map((d) => d.day);
+
+    plan.push({ a: a.index, d: selectedDays });
+
+    // Update load tracking
+    if (!teacherDayLoad[a.teacherId]) teacherDayLoad[a.teacherId] = {};
+    for (const d of selectedDays) {
+      teacherDayLoad[a.teacherId][d] = (teacherDayLoad[a.teacherId][d] || 0) + blockSize;
+    }
+  }
+
+  return plan;
+}
+
+// ─── Pre-Generation Validation ───
+
+export interface ValidationIssue {
+  id: string;
+  type: "error" | "warning" | "info";
+  category: "availability" | "capacity" | "conflict" | "preference";
+  message: string;
+  teacherName?: string;
+  suggestion?: string;
+}
+
+export async function validateBeforeGeneration(
+  centerId: string | null,
+  weekStart: Date,
+  scope: "senior" | "junior" | "all" = "all",
+  customPrompt: string = "",
+): Promise<ValidationIssue[]> {
+  const issues: ValidationIssue[] = [];
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+
+  const [teachers, batches, timeSlots, teachingAssignments, approvedLeaves] = await Promise.all([
+    prisma.teacher.findMany({
+      include: { user: { select: { name: true } }, availability: true },
+    }),
+    prisma.batch.findMany({
+      where: {
+        status: "ACTIVE",
+        ...(centerId ? { centerId } : {}),
+        ...(scope === "senior"
+          ? { batchType: { in: [BatchType.IIT_JEE, BatchType.JEE_MAINS, BatchType.NEET] } }
+          : scope === "junior"
+            ? { batchType: { notIn: [BatchType.IIT_JEE, BatchType.JEE_MAINS, BatchType.NEET] } }
+            : {}),
+      },
+    }),
+    prisma.timeSlot.findMany({
+      where: scope !== "all" ? { OR: [{ scope }, { scope: "all" }] } : {},
+    }),
+    prisma.teachingAssignment.findMany({
+      where: { startDate: { lte: weekStart }, endDate: { gte: weekStart } },
+      include: {
+        teacher: { include: { user: { select: { name: true } } } },
+        batch: { include: { center: { select: { name: true } } } },
+        subject: true,
+      },
+    }),
+    prisma.leave.findMany({
+      where: { status: "APPROVED", startDate: { lte: weekEnd }, endDate: { gte: weekStart } },
+      include: { teacher: { include: { user: { select: { name: true } } } } },
+    }),
+  ]);
+
+  const batchIds = new Set(batches.map((b) => b.id));
+  const relevantAssignments = teachingAssignments.filter((a) => batchIds.has(a.batchId));
+
+  // Build availability map
+  const availabilityMap: Record<string, Record<string, boolean>> = {};
+  for (const t of teachers) {
+    availabilityMap[t.id] = {};
+    for (const a of t.availability) {
+      availabilityMap[t.id][`${a.dayOfWeek}-${a.startTime}`] = a.isAvailable;
+    }
+  }
+
+  // Build leave day map
+  const leaveDayMap: Record<string, number[]> = {};
+  for (const l of approvedLeaves) {
+    if (!leaveDayMap[l.teacherId]) leaveDayMap[l.teacherId] = [];
+    const start = new Date(l.startDate);
+    const end = new Date(l.endDate);
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const day = d.getDay();
+      const adjustedDay = day === 0 ? 6 : day - 1;
+      if (adjustedDay < 7) leaveDayMap[l.teacherId].push(adjustedDay);
+    }
+  }
+
+  // Per-teacher: count total needed vs total capacity
+  const teacherSlots: Record<string, { name: string; totalNeeded: number }> = {};
+  const avgSlotHours = timeSlots.length > 0
+    ? timeSlots.reduce((sum, s) => sum + getSlotDurationHours(s.startTime, s.endTime), 0) / timeSlots.length
+    : 1.5;
+
+  for (const a of relevantAssignments) {
+    const totalWeeks = Math.max(1, Math.ceil((new Date(a.endDate).getTime() - new Date(a.startDate).getTime()) / (7 * 24 * 60 * 60 * 1000)));
+    const hoursPerWeek = (a.totalHours - a.completedHours) / totalWeeks;
+    const slotsPerWeek = Math.max(1, Math.ceil(hoursPerWeek / avgSlotHours));
+
+    if (!teacherSlots[a.teacherId]) {
+      teacherSlots[a.teacherId] = { name: a.teacher.user.name, totalNeeded: 0 };
+    }
+    teacherSlots[a.teacherId].totalNeeded += slotsPerWeek;
+  }
+
+  for (const [teacherId, info] of Object.entries(teacherSlots)) {
+    const avail = availabilityMap[teacherId] || {};
+    let totalCapacity = 0;
+
+    for (let d = 0; d < 7; d++) {
+      if (leaveDayMap[teacherId]?.includes(d)) continue;
+      for (const key of Object.keys(avail)) {
+        if (key.startsWith(`${d}-`) && avail[key]) totalCapacity++;
+      }
+    }
+
+    // If no availability records at all, assume full capacity
+    if (Object.keys(avail).length === 0) {
+      totalCapacity = 7 * timeSlots.length;
+    }
+
+    if (info.totalNeeded > totalCapacity) {
+      issues.push({
+        id: `capacity-${teacherId}`,
+        type: "error",
+        category: "capacity",
+        message: `${info.name} needs ${info.totalNeeded} slots/week but only has ${totalCapacity} available slots.`,
+        teacherName: info.name,
+        suggestion: `Increase ${info.name}'s availability or reduce their teaching load.`,
+      });
+    } else if (info.totalNeeded > totalCapacity * 0.8) {
+      issues.push({
+        id: `load-${teacherId}`,
+        type: "warning",
+        category: "capacity",
+        message: `${info.name} is at ${Math.round((info.totalNeeded / totalCapacity) * 100)}% capacity (${info.totalNeeded}/${totalCapacity} slots).`,
+        teacherName: info.name,
+      });
+    }
+  }
+
+  // Check teachers on leave this week
+  for (const l of approvedLeaves) {
+    const leaveDays = (leaveDayMap[l.teacherId] || []).map((d) => DAY_NAMES[d]).join(", ");
+    issues.push({
+      id: `leave-${l.id}`,
+      type: "warning",
+      category: "availability",
+      message: `${l.teacher.user.name} is on leave: ${leaveDays}. Classes on those days will be skipped.`,
+      teacherName: l.teacher.user.name,
+    });
+  }
+
+  // Check custom prompt contradictions
+  const lowerPrompt = customPrompt.toLowerCase();
+  if (lowerPrompt.includes("saturday off") || lowerPrompt.includes("do not schedule any classes on saturday")) {
+    // Check if any teacher ONLY has Saturday availability
+    for (const [teacherId, info] of Object.entries(teacherSlots)) {
+      const avail = availabilityMap[teacherId] || {};
+      let nonSatSlots = 0;
+      for (const key of Object.keys(avail)) {
+        if (!key.startsWith("5-") && avail[key]) nonSatSlots++;
+      }
+      if (nonSatSlots === 0 && Object.keys(avail).length > 0) {
+        issues.push({
+          id: `sat-conflict-${teacherId}`,
+          type: "error",
+          category: "preference",
+          message: `"Saturday off" requested but ${info.name} is ONLY available on Saturday.`,
+          teacherName: info.name,
+          suggestion: `Either allow Saturday classes or update ${info.name}'s availability to include other days.`,
+        });
+      }
+    }
+  }
+
+  // Summary info
+  const totalSlots = Object.values(teacherSlots).reduce((s, i) => s + i.totalNeeded, 0);
+  issues.push({
+    id: "summary",
+    type: "info",
+    category: "capacity",
+    message: `${relevantAssignments.length} assignments, ${totalSlots} total slots needed, ${teachers.length} teachers.`,
+  });
+
+  return issues;
+}
+
 // ─── Main Generation Function ───
 
 export async function generateTimetable(
@@ -644,7 +894,10 @@ export async function generateTimetable(
         where: centerId ? { centerId } : {},
         include: { center: { select: { id: true, name: true } } },
       }),
-      prisma.timeSlot.findMany({ orderBy: { order: "asc" } }),
+      prisma.timeSlot.findMany({
+        where: scope !== "all" ? { OR: [{ scope }, { scope: "all" }] } : {},
+        orderBy: { order: "asc" },
+      }),
       prisma.teachingAssignment.findMany({
         where: {
           startDate: { lte: weekStart },
@@ -765,21 +1018,55 @@ export async function generateTimetable(
 
   const prompt = buildDayPlanningPrompt(processedAssignments, availabilityMap, leaveDayMap, customPrompt);
 
-  let responseText: string;
-  if (provider === "gemini") {
-    responseText = await callGemini(prompt, apiKey);
-  } else {
-    responseText = await callClaude(prompt, apiKey);
+  // Retry AI call up to 3 times with backoff
+  let aiPlan: AIPlanEntry[] = [];
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const responseText = provider === "gemini"
+        ? await callGemini(prompt, apiKey)
+        : await callClaude(prompt, apiKey);
+
+      aiPlan = parseJSON<AIPlanEntry>(responseText);
+      aiPlan = aiPlan.filter(
+        (p) => typeof p.a === "number" && Array.isArray(p.d) && p.d.every((d) => typeof d === "number")
+      );
+
+      if (aiPlan.length > 0) {
+        console.log(`[Timetable] AI attempt ${attempt}/3 succeeded: ${aiPlan.length} day plans`);
+        break;
+      }
+      console.warn(`[Timetable] AI attempt ${attempt}/3 returned empty plan`);
+    } catch (err) {
+      console.warn(`[Timetable] AI attempt ${attempt}/3 failed:`, err);
+    }
+    if (attempt < 3) {
+      await new Promise((r) => setTimeout(r, 1000 * attempt));
+    }
   }
 
-  let aiPlan = parseJSON<AIPlanEntry>(responseText);
+  // Deterministic fallback if AI failed completely
+  if (aiPlan.length === 0) {
+    console.log(`[Timetable] Using deterministic fallback plan`);
+    aiPlan = buildDeterministicPlan(processedAssignments, availabilityMap, leaveDayMap);
+  }
 
-  // Validate AI plan entries
-  aiPlan = aiPlan.filter(
-    (p) => typeof p.a === "number" && Array.isArray(p.d) && p.d.every((d) => typeof d === "number")
-  );
-
-  console.log(`[Timetable] AI returned ${aiPlan.length} day plans`);
+  // Enforce questionnaire rules deterministically (override AI if needed)
+  const lowerPrompt = customPrompt.toLowerCase();
+  if (lowerPrompt.includes("do not schedule any classes on saturday") || lowerPrompt.includes("saturday off")) {
+    aiPlan = aiPlan.map((p) => ({ ...p, d: p.d.filter((d) => d !== 5) }));
+  }
+  if (lowerPrompt.includes("do not schedule any classes on sunday") || lowerPrompt.includes("sunday off")) {
+    aiPlan = aiPlan.map((p) => ({ ...p, d: p.d.filter((d) => d !== 6) }));
+  }
+  if (lowerPrompt.includes("saturday light") || lowerPrompt.includes("keep saturday light")) {
+    // Cap Saturday assignments — remove day 5 if teacher already has many other days
+    aiPlan = aiPlan.map((p) => {
+      if (p.d.includes(5) && p.d.length > 2) {
+        return { ...p, d: p.d.filter((d) => d !== 5) };
+      }
+      return p;
+    });
+  }
 
   // Handle missing assignments — if AI didn't plan some, add fallback days
   const plannedIndices = new Set(aiPlan.map((p) => p.a));

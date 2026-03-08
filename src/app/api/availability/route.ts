@@ -7,12 +7,13 @@ export async function GET(req: NextRequest) {
   if (error) return error;
 
   const teacherId = req.nextUrl.searchParams.get("teacherId");
-  if (!teacherId) {
-    return NextResponse.json({ error: "teacherId is required" }, { status: 400 });
-  }
+
+  // teacherId is optional — if omitted, fetch all teachers' availability
+  const where: Record<string, unknown> = {};
+  if (teacherId) where.teacherId = teacherId;
 
   const availability = await prisma.teacherAvailability.findMany({
-    where: { teacherId },
+    where,
     orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
   });
 

@@ -44,47 +44,95 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Delete existing entries for this week — scoped to avoid wiping the other scope
-  if (scopeValue === "senior") {
-    await prisma.timetableEntry.deleteMany({
-      where: { weekStart: weekDate, batch: { batchType: { in: SENIOR_BATCH_TYPES } } },
-    });
-  } else if (scopeValue === "junior") {
-    await prisma.timetableEntry.deleteMany({
-      where: { weekStart: weekDate, batch: { batchType: { notIn: SENIOR_BATCH_TYPES } } },
-    });
-  } else {
-    await prisma.timetableEntry.deleteMany({
-      where: { weekStart: weekDate },
-    });
+  // ─── Version Management ───
+
+  // Count existing versions for this week+scope to generate label
+  const existingVersions = await prisma.timetableGeneration.findMany({
+    where: {
+      weekStart: weekDate,
+      ...(scopeValue !== "all" ? { scope: scopeValue } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  // Cap at 5 versions
+  if (existingVersions.length >= 5) {
+    return NextResponse.json(
+      { error: "Maximum 5 versions per week. Delete an old version to generate a new one." },
+      { status: 400 }
+    );
   }
 
-  // Validate new entries don't conflict with retained entries from the other scope
+  const versionNumber = existingVersions.length + 1;
+  const versionLabel = `Version ${versionNumber}`;
+
+  // Deactivate previous active entries for this scope
+  const batchTypeFilter = scopeValue === "senior"
+    ? { batch: { batchType: { in: SENIOR_BATCH_TYPES } } }
+    : scopeValue === "junior"
+      ? { batch: { batchType: { notIn: SENIOR_BATCH_TYPES } } }
+      : {};
+
+  await prisma.timetableEntry.updateMany({
+    where: { weekStart: weekDate, isActive: true, ...batchTypeFilter },
+    data: { isActive: false },
+  });
+
+  // Deactivate previous active versions
+  await prisma.timetableGeneration.updateMany({
+    where: {
+      weekStart: weekDate,
+      isActive: true,
+      ...(scopeValue !== "all" ? { scope: scopeValue } : {}),
+    },
+    data: { isActive: false },
+  });
+
+  // Validate new entries don't conflict with retained active entries from the other scope
   if (scopeValue !== "all") {
     const retainedEntries = await prisma.timetableEntry.findMany({
-      where: { weekStart: weekDate },
+      where: { weekStart: weekDate, isActive: true },
       select: { teacherId: true, classroomId: true, dayOfWeek: true, startTime: true },
     });
 
     for (const retained of retainedEntries) {
       const timeKey = `${retained.dayOfWeek}-${retained.startTime}`;
       if (teacherSlots.has(retained.teacherId) && teacherSlots.get(retained.teacherId)!.has(timeKey)) {
-        conflicts.push(`Teacher ${retained.teacherId} conflicts with existing ${scopeValue === "senior" ? "junior" : "senior"} entry at day ${retained.dayOfWeek}, ${retained.startTime}`);
+        conflicts.push(`Teacher conflicts with existing ${scopeValue === "senior" ? "junior" : "senior"} entry`);
       }
       if (classroomSlots.has(retained.classroomId) && classroomSlots.get(retained.classroomId)!.has(timeKey)) {
-        conflicts.push(`Classroom ${retained.classroomId} conflicts with existing entry at day ${retained.dayOfWeek}, ${retained.startTime}`);
+        conflicts.push(`Classroom conflicts with existing entry`);
       }
     }
 
     if (conflicts.length > 0) {
+      // Rollback: re-activate the entries we just deactivated
+      await prisma.timetableEntry.updateMany({
+        where: { weekStart: weekDate, isActive: false, ...batchTypeFilter },
+        data: { isActive: true },
+      });
       return NextResponse.json(
-        { error: `Cannot save: ${conflicts.length} conflicts with existing ${scopeValue === "senior" ? "junior" : "senior"} timetable`, conflicts },
+        { error: `Cannot save: conflicts with existing ${scopeValue === "senior" ? "junior" : "senior"} timetable`, conflicts },
         { status: 409 }
       );
     }
   }
 
-  // Create new entries
+  // Create the version record
+  const version = await prisma.timetableGeneration.create({
+    data: {
+      weekStart: weekDate,
+      scope: scopeValue,
+      status: "COMPLETED",
+      aiResponse: { entriesCount: entries.length },
+      entryCount: entries.length,
+      label: versionLabel,
+      isActive: true,
+      createdBy: session!.user.id,
+    },
+  });
+
+  // Create new entries with versionId
   const created = await prisma.timetableEntry.createMany({
     data: entries.map(
       (e: {
@@ -107,19 +155,16 @@ export async function POST(req: NextRequest) {
         weekStart: weekDate,
         status: "SCHEDULED",
         classType: e.classType || "ACTUAL",
+        versionId: version.id,
+        isActive: true,
       })
     ),
   });
 
-  // Log generation
-  await prisma.timetableGeneration.create({
-    data: {
-      weekStart: weekDate,
-      status: "COMPLETED",
-      aiResponse: { entriesCount: created.count },
-      createdBy: session!.user.id,
-    },
+  return NextResponse.json({
+    success: true,
+    count: created.count,
+    versionId: version.id,
+    versionLabel,
   });
-
-  return NextResponse.json({ success: true, count: created.count });
 }
